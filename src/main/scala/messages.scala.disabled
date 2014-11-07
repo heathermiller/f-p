@@ -1,0 +1,78 @@
+
+
+object DistributedCollection {
+
+  /* Principle of "Lambda - the ultimate distributive":
+   * Data is local, thus, it is a parameter of the lambda that we send!
+   *
+   * @return an implementation of `Transformer`
+   */
+  def map[A, B, C[_] <: Traversable[_]]: (C[A], A => B) => C[B] =
+    (data: C[A], fun: A => B) => data.map(fun)
+
+  /* @return an implementation of `Combiner`
+   */
+  def foldLeft[A, B, C[_] <: Traversable[_]]: (C[A], B, (B, A) => B) => B =
+    (data: C[A], zero: B, f: (B, A) => B) => data.foldLeft(zero)(f)
+
+  /* Could also be implemented in terms of a `Combiner`.
+   *
+   * @return an implementation of `Accessor`
+   */
+  def reduce[A, C[_] <: Traversable[_]]: (C[A], (A, A) => A) => A =
+    (data: C[A], fun: (A, A) => A) => data.reduce(fun)
+
+}
+
+
+trait Silo[A] {
+
+  /* @return a Silo (view) of the transformed data
+   */
+  def send[B, C](msg: TransformerMessage[A, B, C]): Silo[B]
+
+  /* @return a future of the transformed data
+   */
+  def force[B, C](msg: CombinerMessage[A, B, C]): Future[B]
+
+}
+
+
+trait SiloWithAccess[A] extends Silo[A] {
+
+  /* @return a future of the transformed data
+   */
+  def access[B, C](msg: AccessorMessage[A, B, C]): Future[B]
+}
+
+
+package object silo {
+
+  type Transformer[A, B, C[_] <: Traversable[_]] = (C[A], A => B) => C[B] // stateless
+
+  type Combiner[A, B, C[_] <: Traversable[_]] = (C[A], B, (B, A) => B) => B // stateless
+
+  type Accessor[A, B, C[_] <: Traversable[_]] = (C[A], A => B) => B // stateless
+
+  case class TransformerMessage[A, B, C[_] <: Traversable[_]](combinator: Transformer[A, B, C], spore: A => B)
+    extends AbstractMessage[C[A], A, B, C[B]]
+
+  case class CombinerMessage[A, B, C[_] <: Traversable[_]](combinator: Combiner[A, B, C], spore: A => B)
+    // extends AbstractMessage[C[A], A, B, B]
+
+  case class AccessorMessage[A, B, C[_] <: Traversable[_]](combinator: Accessor[A, B, C], spore: A => B)
+    extends AbstractMessage[C[A], A, B, B]
+
+  // show as second step: generalizing `Message`
+  // in the most general case: no relationship between types `A` and `B`
+  class AbstractMessage[A, B, C, D] {
+
+    // data of type `A`
+    // user spore of type `Spore[B, C]`
+    def combinator: (A, B => C) => D
+
+    def spore: B => C
+
+  }
+
+}
