@@ -1,4 +1,4 @@
-package silt.actors
+package silt
 
 import scala.pickling._
 import binary._

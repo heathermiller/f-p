@@ -14,14 +14,26 @@ trait SendUtils {
   def systemImpl: SystemImpl
 
   def pickleWriteFlush[T: SPickler: FastTypeTag](ch: Channel, msg: T): Unit = {
-    val arr = msg.pickle.value
+    // PICKLING
+    // val arr = msg.pickle.value
+
+    // 1. pickle value
+    val builder = pickleFormat.createBuilder()
+    builder.hintTag(implicitly[FastTypeTag[T]])
+    implicitly[SPickler[T]].pickle(msg, builder)
+    val p = builder.result()
+    val arr = p.value
+
     val buf = ch.alloc().buffer(arr.length)
     buf.writeBytes(arr)
     println(s"writing $msg to channel $ch...")
+    // TODO: why do we have to sync here?
+    // isn't this a performance issue?
     ch.writeAndFlush(buf).sync()
   }
 
   def sendToChannel[T: SPickler: FastTypeTag](ch: Channel, msg: T): Unit = {
+    // TODO: what is this lock used for?
     systemImpl.lock.lock()
     pickleWriteFlush(ch, msg)
     systemImpl.lock.unlock()

@@ -41,39 +41,6 @@ object DemoClient {
 /*
     val fut = system.fromClass[List[Int]](classOf[MySiloFactory], host)
 
-    val done1 = fut.flatMap { siloref =>
-      println("Client: calling apply")
-      val siloref2 = siloref apply { _.map(x => "[" + x + "]") }
-
-      println("Client: calling send")
-      siloref2.send()
-    }
-
-    val res1 = Await.result(done1, 5.seconds)
-    println(s"result 1: $res1")
-
-    ////////////////////////////////////////////////////////////////
-
-    val done2 = fut.flatMap { siloRef =>
-      val dest = Host("127.0.0.1", 8091)
-      val destSilo = system.emptySilo[List[String]](dest)
-
-      // fun: (U, Emitter[V]) => Unit
-      // val siloRef2: SiloRef[List[String]] =
-      siloRef.pumpTo(destSilo) { (elem: Int, emit: Emitter[String]) =>
-        val s = (elem + 10).toString
-        emit.emit(s)
-        emit.emit(s)
-      }
-
-      // crashes, since promise for dest silo does not exist, yet, when builder is done:
-      // Thread.sleep(500)
-      destSilo.send()
-    }
-
-    val res2 = Await.result(done2, 5.seconds)
-    println(s"result 2: $res2")
-
     ////////////////////////////////////////////////////////////////
     // REDUCE:
 

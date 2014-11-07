@@ -35,7 +35,7 @@ class SystemImpl extends SiloSystem with SendUtils {
   def systemImpl = self
 
   // connection status
-  val statusOf: mutable.Map[Address, Status] = new TrieMap[Address, Status]
+  val statusOf: mutable.Map[Host, Status] = new TrieMap[Host, Status]
 
   // replies
   val promiseOf: mutable.Map[Int, Promise[Any]] = new TrieMap[Int, Promise[Any]]
@@ -97,15 +97,14 @@ class SystemImpl extends SiloSystem with SendUtils {
     }
   }
 
-  def talkTo(host: String, port: Int): Future[Channel] = {
-    val a = Address(host, port)
-    val futChannel = statusOf.get(a) match {
+  def talkTo(host: Host): Future[Channel] = {
+    val futChannel = statusOf.get(host) match {
       case None =>
-        val chFut = initChannel(host, port)
+        val chFut = initChannel(host.address, host.port)
         val p = Promise[Channel]()
         chFut.onComplete {
           case Success(conn @ Connected(channel, _)) =>
-            statusOf += (a -> conn)
+            statusOf += (host -> conn)
             p.success(channel)
           case Failure(t) =>
             p.failure(t)
@@ -125,21 +124,17 @@ class SystemImpl extends SiloSystem with SendUtils {
     }
   }
 
-  def fromClass[U, T <: Traversable[U]](clazz: Class[_], h: Host): Future[SiloRef[U, T]] = {
-    val port  = h.port
-    val host  = h.host
-    val refId = refIds.incrementAndGet() - 1
-    println(s"fromClass: connecting to $host:$port...")
-    val futChannel = talkTo(host, port)
+  // effects: refIds, seqNum
+  def fromClass[U, T <: Traversable[U]](clazz: Class[_], host: Host): Future[SiloRef[U, T]] = {
+    println(s"fromClass: connecting to $host...")
+    val futChannel = talkTo(host)
 
+    val refId = refIds.incrementAndGet() - 1
     futChannel.flatMap { channel =>
       val msg = InitSilo(clazz.getName(), refId)
       msg.id = seqNum.incrementAndGet()
       sendWithReply(channel, msg)
-    }.map { x =>
-      // create a typed wrapper
-      new RemoteSiloRef(SiloRefId(refId), self)
-    }
+    }.map { x => new RemoteSiloRef(SiloRefId(refId), self) }
   }
 
 }

@@ -19,14 +19,13 @@ import scala.collection.concurrent.TrieMap
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import graph._
 
-// message specific to actors backend
-case class Graph(node: Node)
 
 case class DoPumpTo[A, B](node: Node, fun: (A, Emitter[B]) => Unit, emitterId: Int, destHost: Host, destRefId: Int)
 
 // emulates a node in the system
-class NodeActor extends Actor {
+class NodeActor(system: SiloSystemInternal) extends Actor {
 
   implicit val timeout: Timeout = 30.seconds
 
@@ -176,6 +175,8 @@ class NodeActor extends Actor {
       }
 
     case msg @ Graph(n) =>
+      println(s"node actor: received graph with node $n")
+
       n match {
         // expect a ForceResponse(value)
         case app: Apply[u, t, v, s] =>
@@ -183,9 +184,11 @@ class NodeActor extends Actor {
           val promise = getOrElseInitPromise(app.refId)
           val localSender = sender
           (self ? Graph(app.input)).map { case ForceResponse(value) =>
+            println(s"yay: input graph is materialized")
             val res = fun(value.asInstanceOf[t])
             val newSilo = new LocalSilo[v, s](res)
             promise.success(newSilo)
+            println(s"responding to ${localSender.path.name}")
             localSender ! ForceResponse(res)
           }
 
@@ -216,11 +219,11 @@ class NodeActor extends Actor {
               builderOfEmitterId += (emitterId -> triple)
               // send DoPumpTo messages to inputs
               inputs.foreach { input =>
-                val host = Config.location(input.from.refId)
+                val host = system.location(input.from.refId)
                 val inputNodeActor = Config.m(host)
                 // must also send node (input.from), so that the input silo can be completed first
                 println(s"NODE $refId: sending DoPumpTo to ${input.from.refId}")
-                inputNodeActor ! DoPumpTo(input.from, input.fun, emitterId, Config.location(refId), refId)
+                inputNodeActor ! DoPumpTo(input.from, input.fun, emitterId, system.location(refId), refId)
               }
               // register completion for responding with ForceResponse
               promise.future.foreach { (silo: LocalSilo[_, _]) =>

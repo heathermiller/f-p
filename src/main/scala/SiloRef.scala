@@ -31,7 +31,7 @@ trait SiloRef[W, T <: Traversable[W]] {
   def id: SiloRefId
 }
 
-final case class Host(host: String, port: Int)
+final case class Host(address: String, port: Int)
 
 final case class SiloRefId(value: Int)
 

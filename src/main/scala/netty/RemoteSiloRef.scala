@@ -20,9 +20,9 @@ class RemoteSiloRef[U, T <: Traversable[U]](val id: SiloRefId, val system: Syste
   // these are not intended to be pickled, though.
   def apply[V, S <: Traversable[V]](fun: Spore[T, S]): SiloRef[V, S] = {
     val port = Config.m(id.value)
-    val host = "127.0.0.1"
-    println(s"RemoteDS: connecting to $host:$port...")
-    val futChannel = system.talkTo(host, port)
+    val host = Host("127.0.0.1", port)
+    println(s"RemoteSiloRef: connecting to $host...")
+    val futChannel = system.talkTo(host)
 
     val newRefId = system.refIds.incrementAndGet()
     // new DS ends up on the same node as `this`
@@ -40,9 +40,9 @@ class RemoteSiloRef[U, T <: Traversable[U]](val id: SiloRefId, val system: Syste
 
   def send(): Future[T] = {
     val port = Config.m(id.value)
-    val host = "127.0.0.1"
-    println(s"RemoteDS: connecting to $host:$port...")
-    val futChannel = system.talkTo(host, port)
+    val host = Host("127.0.0.1", port)
+    println(s"RemoteDS: connecting to $host...")
+    val futChannel = system.talkTo(host)
 
     val intermediate = Promise[Boolean]()
 

@@ -11,6 +11,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import graph._
+
 
 case object Terminate
 
@@ -20,7 +22,7 @@ case object NodeActorsStarted
 
 /** Supervisor of all NodeActors.
  */
-class SystemActor extends Actor {
+class SystemActor(system: SiloSystemInternal) extends Actor {
 
   val waitingForTermination = Promise[Boolean]()
   var started = false
@@ -31,7 +33,7 @@ class SystemActor extends Actor {
       else {
         // create node actors, put into config
         for (i <- 0 to 3) {
-          val nodeActor = context.actorOf(Props[NodeActor])
+          val nodeActor = context.actorOf(Props(new NodeActor(system)))
           context.watch(nodeActor)
           Config.m += (Host("127.0.0.1", 8090 + i) -> nodeActor)
           println(s"added node actor ${nodeActor.path.name}")
@@ -64,7 +66,7 @@ class SystemActor extends Actor {
   }
 }
 
-class SystemImpl extends SiloSystem {
+class SystemImpl extends SiloSystemInternal {
 
   val seqNum = new AtomicInteger(10)
 
@@ -75,7 +77,7 @@ class SystemImpl extends SiloSystem {
   private val actorSystem = ActorSystem("silo-system")
 
   // the system actor creates a few node actors
-  private val systemActor = actorSystem.actorOf(Props[SystemActor])
+  private val systemActor = actorSystem.actorOf(Props(new SystemActor(this)))
 
   private implicit val timeout: Timeout = 30.seconds
 
@@ -88,7 +90,7 @@ class SystemImpl extends SiloSystem {
       val nodeActor    = Config.m(host)
       val refId        = refIds.incrementAndGet()
       println(s"fromClass: register location of $refId")
-      Config.location += (refId -> host)
+      location += (refId -> host)
       val initSilo     = InitSiloFun(fun, refId)
       initSilo.id      = seqNum.incrementAndGet()
       (nodeActor ? initSilo).map { x =>
@@ -101,12 +103,12 @@ class SystemImpl extends SiloSystem {
 
   def fromClass[U, T <: Traversable[U]](clazz: Class[_], host: Host): Future[SiloRef[U, T]] = {
     (systemActor ? StartNodeActors).flatMap { x =>
-      val nodeActor    = Config.m(host)
-      val refId        = refIds.incrementAndGet()
+      val nodeActor = Config.m(host)
+      val refId     = refIds.incrementAndGet()
       println(s"fromClass: register location of $refId")
-      Config.location += (refId -> host)
-      val initSilo     = InitSilo(clazz.getName(), refId)
-      initSilo.id      = seqNum.incrementAndGet()
+      location += (refId -> host)
+      val initSilo  = InitSilo(clazz.getName(), refId)
+      initSilo.id   = seqNum.incrementAndGet()
       (nodeActor ? initSilo).map { x =>
         println("SystemImpl: got response for InitSilo msg")
         // create a typed wrapper
@@ -122,8 +124,8 @@ class SystemImpl extends SiloSystem {
   // to push checking further to compile time, could think of
   // using phantom types to detect whether a ref has been target of non-pumpTo!
   def emptySilo[U, T <: Traversable[U]](host: Host): SiloRef[U, T] = {
-    val refId        = refIds.incrementAndGet()
-    Config.location += (refId -> host)
+    val refId = refIds.incrementAndGet()
+    location += (refId -> host)
     new EmptySiloRef[U, T](refId)(this)
   }
 
@@ -133,4 +135,9 @@ class SystemImpl extends SiloSystem {
     actorSystem.shutdown()
   }
 
+  def send(host: Host, msg: Any): Future[Any] = {
+    val nodeActor = Config.m(host)
+    println(s"found node actor ${nodeActor.path.name}")
+    (nodeActor ? msg).map { case ForceResponse(value) => value }
+  }
 }

@@ -10,18 +10,17 @@ import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.ByteBuf
 import io.netty.util.ReferenceCountUtil
 
+import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioSocketChannel
+import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.channel.ChannelInboundHandlerAdapter
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.Channel
-
 import io.netty.channel.ChannelFuture
 import io.netty.channel.ChannelInitializer
 import io.netty.channel.ChannelOption
 import io.netty.channel.EventLoopGroup
 import io.netty.channel.nio.NioEventLoopGroup
-import io.netty.channel.socket.SocketChannel
-import io.netty.channel.socket.nio.NioServerSocketChannel
 
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
@@ -37,10 +36,10 @@ import scala.collection.mutable
 import scala.collection.concurrent.TrieMap
 import scala.util.{Try, Success, Failure}
 
+import Implicits._
+
 import scala.pickling._
 import binary._
-
-import Implicits._
 
 
 abstract class ClientHandler extends ChannelInboundHandlerAdapter with SendUtils {
@@ -61,6 +60,7 @@ abstract class ClientHandler extends ChannelInboundHandlerAdapter with SendUtils
     }
 
     val arr = bos.toByteArray()
+    // PICKLING
     val pickle = BinaryPickle(arr)
     val command = pickle.unpickle[Any]
     println(s"CLIENT: received $command")
@@ -123,8 +123,6 @@ abstract class AbstractMessage[A, B, C, D] extends HasNames {
 
 ////////////////////////////////
 
-
-case class Address(host: String, port: Int)
 
 abstract class Status
 case class Connected(ch: Channel, group: EventLoopGroup) extends Status

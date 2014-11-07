@@ -14,7 +14,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import scala.collection.mutable
 import scala.collection.concurrent.TrieMap
 
-import akka.actor.{ActorSystem, Props}
+import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 
 
 // for now, every server has hard-coded config
@@ -35,25 +35,26 @@ object Config {
 
 class Server(port: Int, system: SystemImpl) {
 
-  val actorSys = ActorSystem("server-system")
-
   def run(): Unit = {
     println("starting server...")
-
-    // create an actor for queuing incoming messages
-    val receptor = actorSys.actorOf(Props(new Receptor(system)), name = "receptor")
 
     val bossGroup: EventLoopGroup = new NioEventLoopGroup
     val workerGroup: EventLoopGroup = new NioEventLoopGroup
 
+    // Queue for transferring messages from the netty event loop to the server's event loop.
+    val queue: BlockingQueue[HandleIncoming] = new LinkedBlockingQueue[HandleIncoming]()
+    // Thread that blocks on the queue.
+    val receptorRunnable = new ReceptorRunnable(queue, system)
+    val receptorThread = new Thread(receptorRunnable)
+    receptorThread.start()
+
     try {
       val b = new ServerBootstrap
-      val handler = new ServerHandler(system, receptor)
       b.group(bossGroup, workerGroup)
        .channel(classOf[NioServerSocketChannel])
        .childHandler(new ChannelInitializer[SocketChannel]() {
           override def initChannel(ch: SocketChannel): Unit = {
-            ch.pipeline().addLast(handler)
+            ch.pipeline().addLast(new ServerHandler(system, queue))
           }
        })
        .option(ChannelOption.SO_BACKLOG.asInstanceOf[ChannelOption[Any]], 128)
@@ -65,7 +66,11 @@ class Server(port: Int, system: SystemImpl) {
       system.latch.await()
 
       print(s"SERVER: shutting down...")
-      actorSys.shutdown()
+
+      receptorRunnable.shouldTerminate = true
+      receptorThread.interrupt()
+      receptorThread.join()
+
       println("DONE")
     } finally {
       workerGroup.shutdownGracefully()
