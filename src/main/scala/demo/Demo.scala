@@ -4,6 +4,7 @@ package demo
 import scala.spores._
 
 import scala.pickling._
+import Defaults._
 import binary._
 
 import silt.actors._

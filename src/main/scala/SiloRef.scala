@@ -3,6 +3,7 @@ package silt
 import scala.spores._
 
 import scala.pickling._
+import Defaults._
 import binary._
 
 import scala.concurrent.{Future, Promise, Await}
@@ -21,12 +22,13 @@ object SiloRef {
 */
 
 trait SiloRef[W, T <: Traversable[W]] {
-  def apply[V, S <: Traversable[V]](fun: Spore[T, S]): SiloRef[V, S]
+  def apply[V, S <: Traversable[V]](fun: Spore[T, S])
+                                   (implicit tag: FastTypeTag[Spore[T, S]], pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S]
 
   def send(): Future[T]
 
   def pumpTo[V, R <: Traversable[V]](destSilo: SiloRef[V, R])(fun: Spore2[W, Emitter[V], Unit])
-                                    (implicit bf: BuilderFactory[V, R], pickler: SPickler[V], unpickler: Unpickler[V]): Unit = ???
+                                    (implicit bf: BuilderFactory[V, R], pickler: Pickler[V], unpickler: Unpickler[V]): Unit = ???
 
   def id: SiloRefId
 }

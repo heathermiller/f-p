@@ -1,6 +1,10 @@
 package silt
 package actors
 
+import scala.pickling._
+import Defaults._
+import binary._
+
 import akka.actor.{Actor, ActorSystem, Props, Terminated}
 import akka.util.Timeout
 import akka.pattern.ask
@@ -103,12 +107,12 @@ class SystemImpl extends SiloSystemInternal {
 
   def fromClass[U, T <: Traversable[U]](clazz: Class[_], host: Host): Future[SiloRef[U, T]] = {
     (systemActor ? StartNodeActors).flatMap { x =>
-      val nodeActor = Config.m(host)
-      val refId     = refIds.incrementAndGet()
+      val refId = refIds.incrementAndGet()
       println(s"fromClass: register location of $refId")
       location += (refId -> host)
       val initSilo  = InitSilo(clazz.getName(), refId)
       initSilo.id   = seqNum.incrementAndGet()
+      val nodeActor = Config.m(host)
       (nodeActor ? initSilo).map { x =>
         println("SystemImpl: got response for InitSilo msg")
         // create a typed wrapper
@@ -135,7 +139,7 @@ class SystemImpl extends SiloSystemInternal {
     actorSystem.shutdown()
   }
 
-  def send(host: Host, msg: Any): Future[Any] = {
+  def send[T <: ReplyMessage : Pickler](host: Host, msg: T): Future[Any] = {
     val nodeActor = Config.m(host)
     println(s"found node actor ${nodeActor.path.name}")
     (nodeActor ? msg).map { case ForceResponse(value) => value }

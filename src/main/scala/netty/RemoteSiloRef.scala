@@ -11,6 +11,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 
+/*
 class RemoteSiloRef[U, T <: Traversable[U]](val id: SiloRefId, val system: SystemImpl) extends SiloRef[U, T] with SendUtils {
 
   def systemImpl: SystemImpl = system
@@ -61,3 +62,4 @@ class RemoteSiloRef[U, T <: Traversable[U]](val id: SiloRefId, val system: Syste
   }
 
 }
+*/

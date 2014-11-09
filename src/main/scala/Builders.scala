@@ -1,6 +1,7 @@
 package silt
 
 import scala.pickling._
+import Defaults._
 import binary._
 
 import scala.collection.mutable.ListBuffer
@@ -39,7 +40,7 @@ class ListBuilder[T] extends AbstractBuilder {
 //       implicit pickler!
 // TODO: enable signalling errors?
 trait Emitter[T] {
-  def emit(v: T)(implicit pickler: SPickler[T], tag: FastTypeTag[T], unpickler: Unpickler[T]): Unit
+  def emit(v: T)(implicit pickler: Pickler[T], unpickler: Unpickler[T]): Unit
   def done(): Unit
 }
 
@@ -47,5 +48,5 @@ trait PartitioningEmitter[T, K] extends Emitter[T] {
   /** default partition */
   def default(): K
   /** emit to partition k */
-  def emitTo(k: K, v: T)(implicit p: SPickler[T], tag: FastTypeTag[T]): Unit
+  def emitTo(k: K, v: T)(implicit p: Pickler[T]): Unit
 }

@@ -2,48 +2,25 @@ package silt
 package netty
 
 import io.netty.bootstrap.ServerBootstrap
-
-import io.netty.channel.ChannelFuture
-import io.netty.channel.ChannelInitializer
-import io.netty.channel.ChannelOption
-import io.netty.channel.EventLoopGroup
+import io.netty.channel.{EventLoopGroup, ChannelInitializer, ChannelOption}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 
-import scala.collection.mutable
-import scala.collection.concurrent.TrieMap
-
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
-
-
-// for now, every server has hard-coded config
-object Config {
-
-  // map node ids to port nums
-  val m: mutable.Map[Int, Int] = {
-    val trie = new TrieMap[Int, Int]
-    trie += (0 -> 8090)
-    trie += (1 -> 8091)
-    trie += (2 -> 8092)
-    trie += (3 -> 8093)
-    trie
-  }
-
-}
 
 
 class Server(port: Int, system: SystemImpl) {
 
   def run(): Unit = {
-    println("starting server...")
+    println(s"SERVER: starting on port $port...")
 
     val bossGroup: EventLoopGroup = new NioEventLoopGroup
     val workerGroup: EventLoopGroup = new NioEventLoopGroup
 
-    // Queue for transferring messages from the netty event loop to the server's event loop.
+    // Queue for transferring messages from the netty event loop to the server's event loop
     val queue: BlockingQueue[HandleIncoming] = new LinkedBlockingQueue[HandleIncoming]()
-    // Thread that blocks on the queue.
+    // Thread that blocks on the queue
     val receptorRunnable = new ReceptorRunnable(queue, system)
     val receptorThread = new Thread(receptorRunnable)
     receptorThread.start()
@@ -60,11 +37,10 @@ class Server(port: Int, system: SystemImpl) {
        .option(ChannelOption.SO_BACKLOG.asInstanceOf[ChannelOption[Any]], 128)
        .childOption(ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], true)
 
-      // Bind and start to accept incoming connections.
+      // Bind port and start accepting incoming connections
       b.bind(port).sync()
 
       system.latch.await()
-
       print(s"SERVER: shutting down...")
 
       receptorRunnable.shouldTerminate = true

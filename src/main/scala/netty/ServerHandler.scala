@@ -11,6 +11,8 @@ import io.netty.channel.ChannelFutureListener
 import io.netty.util.ReferenceCountUtil
 
 import scala.pickling._
+import shareNothing._
+import Defaults._
 import binary._
 
 import Implicits._
@@ -18,7 +20,14 @@ import Implicits._
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.{CountDownLatch, BlockingQueue, LinkedBlockingQueue}
 
+import scala.concurrent.Promise
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.mutable
+import scala.collection.concurrent.TrieMap
+
 import akka.actor.{Actor, ActorRef}
+
+import silt.graph._
 
 
 case class HandleIncoming(msg: Any, ctx: ChannelHandlerContext)
@@ -113,7 +122,23 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
 
   def systemImpl = system
 
+  // maps SiloRef refIds to promises of local silo instances
+  val promiseOf: mutable.Map[Int, Promise[LocalSilo[_, _]]] = new TrieMap[Int, Promise[LocalSilo[_, _]]]
+
+  def getOrElseInitPromise(id: Int): Promise[LocalSilo[_, _]] = promiseOf.get(id) match {
+    case None =>
+      println("no promise found")
+      val newPromise = Promise[LocalSilo[_, _]]()
+      promiseOf += (id -> newPromise)
+      newPromise
+    case Some(promise) =>
+      println("found promise")
+      promise
+  }
+
   private def handleIncoming(msg: Any, ctx: ChannelHandlerContext): Unit = {
+    // TODO: add case for `msg` that is already deserialized?
+
     // TODO: unpickle asynchronously
     val in: ByteBuf = msg.asInstanceOf[ByteBuf]
     val bos = new ByteArrayOutputStream
@@ -137,6 +162,9 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
 
       case theMsg @ InitSilo(fqcn, refId) =>
         println(s"SERVER: creating Silo using class $fqcn...")
+
+        val promise = getOrElseInitPromise(refId)
+
         val clazz = Class.forName(fqcn)
         println(s"SERVER: looked up $clazz")
         val inst = clazz.newInstance()
@@ -144,7 +172,9 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
 
         inst match {
           case factory: SiloFactory[u, t] =>
-            val silo = factory.data
+            val silo = factory.data // COMPUTE-INTENSIVE
+            promise.success(silo)
+
             system.localSiloRefOf += (refId -> silo)
 
             println(s"SERVER: created $silo. responding...")
@@ -187,6 +217,21 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         val replyMsg = ForceResponse(theDS/*.asInstanceOf[LocalSilo[Any]]*/.value)
         replyMsg.id = theMsg.id
         sendToChannel(ctx.channel(), replyMsg)
+
+      case msg @ Graph(n) =>
+        println(s"node actor: received graph with node $n")
+
+        n match {
+          case m: Materialized =>
+            promiseOf(m.refId).future.foreach { (silo: LocalSilo[_, _]) =>
+              val replyMsg = ForceResponse(silo.value)
+              replyMsg.id = msg.id
+              sendToChannel(ctx.channel(), replyMsg)
+            }
+
+          case _ =>
+            throw new Exception("boom")
+        }
     }
   }
 

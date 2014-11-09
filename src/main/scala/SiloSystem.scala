@@ -1,5 +1,8 @@
 package silt
 
+import scala.pickling._
+import Defaults._
+
 import scala.concurrent.Future
 import scala.collection.mutable
 import scala.collection.concurrent.TrieMap
@@ -27,6 +30,7 @@ private[silt] trait SiloSystemInternal extends SiloSystem {
   // map ref ids to host locations
   val location: mutable.Map[Int, Host] = new TrieMap[Int, Host]
 
-  def send(host: Host, msg: Any): Future[Any]
+  // idea: return Future[SelfDescribing]
+  def send[T <: ReplyMessage : Pickler](host: Host, msg: T): Future[Any]
 
 }

@@ -4,6 +4,7 @@ package actors
 import scala.spores._
 
 import scala.pickling._
+import Defaults._
 import binary._
 
 import scala.util.{Try, Success, Failure}
@@ -33,6 +34,7 @@ object DemoClient {
   val system = new SystemImpl
   def systemImpl = system
 
+  val pickler = implicitly[Pickler[(Int, List[String])]]
   val unpickler = implicitly[Unpickler[(Int, List[String])]]
 
   def main(args: Array[String]): Unit = {
@@ -90,10 +92,12 @@ object DemoClient {
       val group11 = system.emptySilo[(Int, List[String]), List[(Int, List[String])]](host)
       val group12 = system.emptySilo[(Int, List[String]), List[(Int, List[String])]](host)
       mapped1.pumpTo(group11)(spore {
+        implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
         (elem: (Int, List[String]), emit: Emitter[(Int, List[String])]) => if (elem._1 == 0) emit.emit(elem)
       })
       mapped1.pumpTo(group12)(spore {
+        implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
         (elem: (Int, List[String]), emit: Emitter[(Int, List[String])]) => if (elem._1 == 1) emit.emit(elem)
       })
@@ -103,10 +107,12 @@ object DemoClient {
       val group21 = system.emptySilo[(Int, List[String]), List[(Int, List[String])]](host2)
       val group22 = system.emptySilo[(Int, List[String]), List[(Int, List[String])]](host2)
       mapped2.pumpTo(group21)(spore {
+        implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
         (elem: (Int, List[String]), emit: Emitter[(Int, List[String])]) => if (elem._1 == 0) emit.emit(elem)
       })
       mapped2.pumpTo(group22)( spore {
+        implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
         (elem: (Int, List[String]), emit: Emitter[(Int, List[String])]) => if (elem._1 == 1) emit.emit(elem)
       })
@@ -114,10 +120,12 @@ object DemoClient {
       // merge group11 and group21
       val group1 = system.emptySilo[(Int, List[String]), List[(Int, List[String])]](host)
       group11.pumpTo(group1)(spore {
+        implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
         (elem, emit) => if (elem._1 == 0) emit.emit(elem)
       })
       group21.pumpTo(group1)(spore {
+        implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
         (elem, emit) => if (elem._1 == 0) emit.emit(elem)
       })
@@ -125,10 +133,12 @@ object DemoClient {
       // merge group12 and group22
       val group2 = system.emptySilo[(Int, List[String]), List[(Int, List[String])]](host2)
       group12.pumpTo(group2)(spore {
+        implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
         (elem, emit) => if (elem._1 == 1) emit.emit(elem)
       })
       group22.pumpTo(group2)(spore {
+        implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
         (elem, emit) => if (elem._1 == 1) emit.emit(elem)
       })

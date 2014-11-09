@@ -39,6 +39,7 @@ import scala.util.{Try, Success, Failure}
 import Implicits._
 
 import scala.pickling._
+import Defaults._
 import binary._
 
 
@@ -123,10 +124,6 @@ abstract class AbstractMessage[A, B, C, D] extends HasNames {
 
 ////////////////////////////////
 
-
-abstract class Status
-case class Connected(ch: Channel, group: EventLoopGroup) extends Status
-case object Disconnected extends Status
 
 case class Terminate()
 

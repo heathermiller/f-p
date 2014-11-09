@@ -8,6 +8,7 @@ import akka.util.Timeout
 import akka.pattern.ask
 
 import scala.pickling._
+import Defaults._
 import binary._
 
 import scala.concurrent.{Future, Promise}
@@ -49,7 +50,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
   }
 
   class RemoteEmitter[T](destNodeActor: ActorRef, emitterId: Int, destRefId: Int) extends Emitter[T] {
-    def emit(v: T)(implicit pickler: SPickler[T], tag: FastTypeTag[T], unpickler: Unpickler[T]): Unit = {
+    def emit(v: T)(implicit pickler: Pickler[T], unpickler: Unpickler[T]): Unit = {
       // println(s"using pickler of class type ${pickler.getClass.getName} to pickle $v")
 
       // val p = v.pickle
@@ -57,7 +58,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       try {
         // 1. pickle value
         val builder = pickleFormat.createBuilder()
-        builder.hintTag(tag)
+        builder.hintTag(pickler.tag)
         pickler.pickle(v, builder)
         val p = builder.result()
         numPickled.incrementAndGet()

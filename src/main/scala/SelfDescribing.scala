@@ -1,6 +1,7 @@
 package silt
 
 import scala.pickling._
+import Defaults._
 import binary._
 
 import scala.reflect.runtime.currentMirror
@@ -8,12 +9,14 @@ import scala.reflect.runtime.currentMirror
 final case class SelfDescribing(unpicklerClassName: String, blob: Array[Byte]) {
   def result(): Any = {
     val pickle = BinaryPickleArray(blob)
-    val reader = pickleFormat.createReader(pickle, currentMirror)
+    val reader = pickleFormat.createReader(pickle)
     reader.hintTag(implicitly[FastTypeTag[Any]])
 
-    val unpicklerInst = Class.forName(unpicklerClassName).newInstance().asInstanceOf[Unpickler[Any]]
-    val typeString = reader.beginEntryNoTag()
-    unpicklerInst.unpickle({ FastTypeTag(typeString) }, reader)
+    // val unpicklerInst = Class.forName(unpicklerClassName).newInstance().asInstanceOf[Unpickler[Any]]
+    val unpicklerInst = scala.concurrent.util.Unsafe.instance.allocateInstance(Class.forName(unpicklerClassName)).asInstanceOf[Unpickler[Any]]
+
+    val typeString = reader.beginEntry()
+    unpicklerInst.unpickle(typeString, reader)
   }
 }
 

@@ -1,6 +1,8 @@
 package silt
 
 import scala.spores._
+import scala.pickling._
+import Defaults._
 
 import scala.reflect.ClassTag
 
