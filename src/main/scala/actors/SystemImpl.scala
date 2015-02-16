@@ -70,13 +70,7 @@ class SystemActor(system: SiloSystemInternal) extends Actor {
   }
 }
 
-class SystemImpl extends SiloSystemInternal {
-
-  val seqNum = new AtomicInteger(10)
-
-  val refIds = new AtomicInteger(0)
-
-  val emitterIds = new AtomicInteger(0)
+class SystemImpl extends SiloSystem with SiloSystemInternal {
 
   private val actorSystem = ActorSystem("silo-system")
 
@@ -89,49 +83,19 @@ class SystemImpl extends SiloSystemInternal {
     (systemActor ? StartNodeActors).map { x => true }
   }
 
-  def fromFun[U, T <: Traversable[U]](host: Host)(fun: () => LocalSilo[U, T]): Future[SiloRef[U, T]] = {
+  def initRequest[U, T <: Traversable[U], V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[U, T]] =
     (systemActor ? StartNodeActors).flatMap { x =>
       val nodeActor    = Config.m(host)
       val refId        = refIds.incrementAndGet()
-      println(s"fromClass: register location of $refId")
-      location += (refId -> host)
-      val initSilo     = InitSiloFun(fun, refId)
+      val initSilo     = mkMsg(refId)
       initSilo.id      = seqNum.incrementAndGet()
-      (nodeActor ? initSilo).map { x =>
-        println("SystemImpl: got response for InitSilo msg")
-        // create a typed wrapper
-        new MaterializedSiloRef[U, T](refId)(this)
-      }
-    }
-  }
-
-  def fromClass[U, T <: Traversable[U]](clazz: Class[_], host: Host): Future[SiloRef[U, T]] = {
-    (systemActor ? StartNodeActors).flatMap { x =>
-      val refId = refIds.incrementAndGet()
-      println(s"fromClass: register location of $refId")
       location += (refId -> host)
-      val initSilo  = InitSilo(clazz.getName(), refId)
-      initSilo.id   = seqNum.incrementAndGet()
-      val nodeActor = Config.m(host)
       (nodeActor ? initSilo).map { x =>
         println("SystemImpl: got response for InitSilo msg")
         // create a typed wrapper
-        new MaterializedSiloRef[U, T](refId)(this)
+        new MaterializedSiloRef[U, T](refId, host)(this)
       }
     }
-  }
-
-  // the idea is that empty silos can only be filled using pumpTos.
-  // we'll detect issues like trying to fill a silo that's been constructed
-  // *not* using pumpTo at runtime (before running the topology, though!)
-  //
-  // to push checking further to compile time, could think of
-  // using phantom types to detect whether a ref has been target of non-pumpTo!
-  def emptySilo[U, T <: Traversable[U]](host: Host): SiloRef[U, T] = {
-    val refId = refIds.incrementAndGet()
-    location += (refId -> host)
-    new EmptySiloRef[U, T](refId)(this)
-  }
 
   def waitUntilAllClosed(): Unit = {
     val done = systemActor ? Terminate

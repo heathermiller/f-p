@@ -23,8 +23,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import graph._
 
 
-case class DoPumpTo[A, B](node: Node, fun: (A, Emitter[B]) => Unit, emitterId: Int, destHost: Host, destRefId: Int)
-
 // emulates a node in the system
 class NodeActor(system: SiloSystemInternal) extends Actor {
 

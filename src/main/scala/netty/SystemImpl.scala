@@ -50,10 +50,6 @@ class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
   // SiloRef map
   val localSiloRefOf: mutable.Map[Int, LocalSilo[_, _]] = new TrieMap[Int, LocalSilo[_, _]]
 
-  val seqNum = new AtomicInteger(10)
-  val refIds = new AtomicInteger(0)
-  val emitterIds = new AtomicInteger(0)
-
   val lock = new ReentrantLock
 
   val latch = new CountDownLatch(1)
@@ -68,6 +64,8 @@ class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
   }
 
   register[graph.Graph]
+
+  def start(): Future[Boolean] = Future.successful(true)
 
   def initChannel(host: String, port: Int): Future[Connected] = {
     println(s"init channel to port $port...")
@@ -142,18 +140,17 @@ class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
     }
   }
 
-  // effects: refIds, seqNum
-  def fromClass[U, T <: Traversable[U]](clazz: Class[_], host: Host): Future[SiloRef[U, T]] = {
+  // effects: refIds, seqNum, location
+  def initRequest[U, T <: Traversable[U], V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[U, T]] = {
     val refId = refIds.incrementAndGet()
-    println(s"fromClass: register location of $refId: $host")
+    val msg   = mkMsg(refId)
+    msg.id    = seqNum.incrementAndGet()
     location += (refId -> host)
-    val msg = InitSilo(clazz.getName(), refId)
-    msg.id = seqNum.incrementAndGet()
-    println(s"fromClass: connecting to $host...")
+    println(s"initRequest: connecting to $host...")
     send(host, msg).map { x =>
       println("SystemImpl: got response for InitSilo msg")
       // create a typed wrapper
-      new MaterializedSiloRef[U, T](refId)(this)
+      new MaterializedSiloRef[U, T](refId, host)(this)
     }
   }
 

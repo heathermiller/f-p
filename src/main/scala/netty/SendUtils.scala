@@ -3,7 +3,7 @@ package netty
 
 import scala.pickling._
 import Defaults._
-// import binary._
+import shareNothing._
 
 import _root_.io.netty.channel.Channel
 
@@ -24,7 +24,7 @@ trait SendUtils {
     val tag = implicitly[Pickler[T]].tag
     println(s"tag: ${tag.key}")
 
-    if (msg.isInstanceOf[graph.Graph] || msg.isInstanceOf[ForceResponse]) {
+    if (msg.isInstanceOf[graph.Graph] || msg.isInstanceOf[ForceResponse] || msg.isInstanceOf[InitSiloFun[_, _]]) {
       import json._
       val builder = pickleFormat.createBuilder()
       builder.hintTag(tag)
@@ -48,11 +48,13 @@ trait SendUtils {
     val p = builder.result()
     val arr = p.value
 
-    val buf = ch.alloc().buffer(arr.length)
+    // 2. allocate Netty `ByteBuf`
+    val allocator = ch.alloc()
+    // allocators "are expected to be thread-safe" (see http://netty.io/4.0/api/io/netty/buffer/ByteBufAllocator.html)
+    val buf = allocator.buffer(arr.length)
     buf.writeBytes(arr)
     println(s"writing $msg to channel $ch...")
-    // TODO: why do we have to sync here?
-    // isn't this a performance issue?
+    // TODO: why do we sync() here? isn't this a performance issue?
     ch.writeAndFlush(buf).sync()
   }
 

@@ -15,7 +15,7 @@ import Picklers._
 final case class PumpToInput[T <: Traversable[U], U, V, R <: Traversable[_]](from: ProxySiloRef[U, T], fun: (U, Emitter[V]) => Unit, bf: BuilderFactory[V, R])
 
 // IDEA: create ref ids immediately, as well as emitter ids
-abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int)(implicit system: SiloSystemInternal) extends SiloRef[W, T] {
+abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(implicit system: SiloSystemInternal) extends SiloRef[W, T] {
 
   def apply[V, S <: Traversable[V]](g: Spore[T, S])
                                    (implicit tag: FastTypeTag[Spore[T, S]], pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S] = {
@@ -57,7 +57,7 @@ abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int)(implicit system:
 class ApplySiloRef[V, S <: Traversable[V], U, T <: Traversable[U]]
                   (val input: ProxySiloRef[V, S], val refId: Int, val f: S => T,
                    val tag: FastTypeTag[Spore[S, T]], val pickler: Pickler[Spore[S, T]], val unpickler: Unpickler[Spore[S, T]])
-  (implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId) {
+  (implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId, input.host) { // result on same host as input
   def node(): Node = {
     // recursively create graph node for `input`
     val prevNode = input.node()
@@ -66,14 +66,14 @@ class ApplySiloRef[V, S <: Traversable[V], U, T <: Traversable[U]]
 }
 
 // created by SystemImpl.fromClass
-class MaterializedSiloRef[U, T <: Traversable[U]](val refId: Int)(implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId) {
+class MaterializedSiloRef[U, T <: Traversable[U]](val refId: Int, host: Host)(implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId, host) {
   def node(): Node = {
     new Materialized(refId)
   }
 }
 
 // created by SystemImpl.emptySilo
-class EmptySiloRef[U, T <: Traversable[U]](val refId: Int)(implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId) {
+class EmptySiloRef[U, T <: Traversable[U]](val refId: Int, host: Host)(implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId, host) {
   val emitterId = system.emitterIds.incrementAndGet()
   def node(): Node = {
     val nodeInputs = inputs.map { case pumpToInput: PumpToInput[s, u, v, T] =>
@@ -81,6 +81,6 @@ class EmptySiloRef[U, T <: Traversable[U]](val refId: Int)(implicit system: Silo
       println(s"empty silo $refId has input ${fromNode.refId}")
       PumpNodeInput[u, v, T](fromNode, pumpToInput.fun, pumpToInput.bf)
     }
-    new MultiInput(nodeInputs, refId, emitterId)
+    new MultiInput(nodeInputs, refId, host, emitterId)
   }
 }

@@ -12,8 +12,11 @@ import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 
 class Server(port: Int, system: SystemImpl) {
 
+  //FIXME: hostname
+  private val host = Host("127.0.0.1", port)
+
   def run(): Unit = {
-    println(s"SERVER: starting on port $port...")
+    println(s"SERVER [$host]: starting...")
 
     val bossGroup: EventLoopGroup = new NioEventLoopGroup
     val workerGroup: EventLoopGroup = new NioEventLoopGroup
@@ -21,7 +24,7 @@ class Server(port: Int, system: SystemImpl) {
     // Queue for transferring messages from the netty event loop to the server's event loop
     val queue: BlockingQueue[HandleIncoming] = new LinkedBlockingQueue[HandleIncoming]()
     // Thread that blocks on the queue
-    val receptorRunnable = new ReceptorRunnable(queue, system)
+    val receptorRunnable = new ReceptorRunnable(queue, system, host)
     val receptorThread = new Thread(receptorRunnable)
     receptorThread.start()
 
@@ -41,7 +44,7 @@ class Server(port: Int, system: SystemImpl) {
       b.bind(port).sync()
 
       system.latch.await()
-      print(s"SERVER: shutting down...")
+      print(s"SERVER [$host]: shutting down...")
 
       receptorRunnable.shouldTerminate = true
       receptorThread.interrupt()
@@ -56,6 +59,9 @@ class Server(port: Int, system: SystemImpl) {
 }
 
 object Server {
+
+  scala.pickling.runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
+  scala.pickling.runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
 
   def main(args: Array[String]): Unit = {
     val port =

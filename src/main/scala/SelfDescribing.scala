@@ -10,13 +10,13 @@ final case class SelfDescribing(unpicklerClassName: String, blob: Array[Byte]) {
   def result(): Any = {
     val pickle = BinaryPickleArray(blob)
     val reader = pickleFormat.createReader(pickle)
-    reader.hintTag(implicitly[FastTypeTag[Any]])
 
     // val unpicklerInst = Class.forName(unpicklerClassName).newInstance().asInstanceOf[Unpickler[Any]]
     val unpicklerInst = scala.concurrent.util.Unsafe.instance.allocateInstance(Class.forName(unpicklerClassName)).asInstanceOf[Unpickler[Any]]
 
     val typeString = reader.beginEntry()
-    unpicklerInst.unpickle(typeString, reader)
+    reader.hintTag(unpicklerInst.tag)
+    unpicklerInst.unpickle(unpicklerInst.tag.key, reader)
   }
 }
 

@@ -31,6 +31,8 @@ trait SiloRef[W, T <: Traversable[W]] {
                                     (implicit bf: BuilderFactory[V, R], pickler: Pickler[V], unpickler: Unpickler[V]): Unit = ???
 
   def id: SiloRefId
+
+  def host: Host
 }
 
 final case class Host(address: String, port: Int)

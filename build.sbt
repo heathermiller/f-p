@@ -1,5 +1,8 @@
+import com.typesafe.sbt.SbtMultiJvm
+import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 
 lazy val root = (project in file(".")).
+  settings(SbtMultiJvm.multiJvmSettings: _*).
   settings(
     name := "f-p",
     version := "0.1.0-SNAPSHOT",
@@ -16,5 +19,7 @@ lazy val root = (project in file(".")).
     ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s"),
     parallelExecution in Global := false,
-    scalacOptions ++= Seq("-feature", "-unchecked", "-deprecation"/*, "-Xprint:clean", "-Xlog-implicits"*/)
-  )
+    scalacOptions ++= Seq("-feature", "-unchecked", "-deprecation"/*, "-Xprint:clean", "-Xlog-implicits"*/),
+    // make sure that MultiJvm test are compiled by the default test compilation
+    compile in MultiJvm <<= (compile in MultiJvm) triggeredBy (compile in Test)
+  ) configs (MultiJvm)

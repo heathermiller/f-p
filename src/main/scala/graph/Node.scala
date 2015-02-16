@@ -19,9 +19,15 @@ final case class Materialized(refId: Int) extends Node
 final case class Apply[U, T <: Traversable[U], V, S <: Traversable[V]]
                       (input: Node, refId: Int, fun: T => S, tag: FastTypeTag[Spore[T, S]], pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]) extends Node
 
-final case class MultiInput[R](inputs: List[PumpNodeInput[_, _, R]], refId: Int, emitterId: Int) extends Node
+final case class MultiInput[R](inputs: List[PumpNodeInput[_, _, R]], refId: Int, destHost: Host, emitterId: Int) extends Node
 
 final case class PumpNodeInput[U, V, R](from: Node, fun: (U, Emitter[V]) => Unit, bf: BuilderFactory[V, R])
 
 // remote message
 final case class Graph(node: Node) extends ReplyMessage
+
+sealed abstract class Command
+// remote message
+case class DoPumpTo[A, B](node: Node, fun: (A, Emitter[B]) => Unit, emitterId: Int, destHost: Host, destRefId: Int) extends Command
+
+case class CommandEnvelope(cmd: Command)
