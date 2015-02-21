@@ -18,12 +18,12 @@ final case class PumpToInput[T <: Traversable[U], U, V, R <: Traversable[_]](fro
 abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(implicit system: SiloSystemInternal) extends SiloRef[W, T] {
 
   def apply[V, S <: Traversable[V]](g: Spore[T, S])
-                                   (implicit tag: FastTypeTag[Spore[T, S]], pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S] = {
+                                   (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S] = {
     val newRefId = system.refIds.incrementAndGet()
     val host = system.location(refId)
     println(s"apply: register location of $newRefId: $host")
     system.location += (newRefId -> host)
-    new ApplySiloRef[W, T, V, S](this, newRefId, g, tag, pickler, unpickler)
+    new ApplySiloRef[W, T, V, S](this, newRefId, g, pickler, unpickler)
   }
 
   override def pumpTo[V, R <: Traversable[V]](destSilo: SiloRef[V, R])(fun: Spore2[W, Emitter[V], Unit])
@@ -56,12 +56,12 @@ abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(
 
 class ApplySiloRef[V, S <: Traversable[V], U, T <: Traversable[U]]
                   (val input: ProxySiloRef[V, S], val refId: Int, val f: S => T,
-                   val tag: FastTypeTag[Spore[S, T]], val pickler: Pickler[Spore[S, T]], val unpickler: Unpickler[Spore[S, T]])
+                   val pickler: Pickler[Spore[S, T]], val unpickler: Unpickler[Spore[S, T]])
   (implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId, input.host) { // result on same host as input
   def node(): Node = {
     // recursively create graph node for `input`
     val prevNode = input.node()
-    new Apply[V, S, U, T](prevNode, refId, f, tag, pickler, unpickler)
+    new Apply[V, S, U, T](prevNode, refId, f, pickler, unpickler)
   }
 }
 
@@ -79,7 +79,7 @@ class EmptySiloRef[U, T <: Traversable[U]](val refId: Int, host: Host)(implicit 
     val nodeInputs = inputs.map { case pumpToInput: PumpToInput[s, u, v, T] =>
       val fromNode = pumpToInput.from.node()
       println(s"empty silo $refId has input ${fromNode.refId}")
-      PumpNodeInput[u, v, T](fromNode, pumpToInput.fun, pumpToInput.bf)
+      PumpNodeInput[u, v, T](fromNode, pumpToInput.from.host, pumpToInput.fun, pumpToInput.bf)
     }
     new MultiInput(nodeInputs, refId, host, emitterId)
   }

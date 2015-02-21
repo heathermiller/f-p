@@ -23,7 +23,7 @@ object SiloRef {
 
 trait SiloRef[W, T <: Traversable[W]] {
   def apply[V, S <: Traversable[V]](fun: Spore[T, S])
-                                   (implicit tag: FastTypeTag[Spore[T, S]], pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S]
+                                   (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S]
 
   def send(): Future[T]
 

@@ -60,6 +60,11 @@ class Server(port: Int, system: SystemImpl) {
 
 object Server {
 
+  val NO_CHUNK: Byte = 0
+  val FST_CHUNK: Byte = 1
+  val MID_CHUNK: Byte = 2
+  val LAST_CHUNK: Byte = 3
+
   scala.pickling.runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
   scala.pickling.runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
 

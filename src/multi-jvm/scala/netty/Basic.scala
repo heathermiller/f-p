@@ -12,17 +12,23 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Random
 
-import silt.{SiloRef, Host, LocalSilo}
+import silt.{SiloRef, Host, LocalSilo, Emitter}
 import silt.netty.{SendUtils, SystemImpl, Server, TestSiloFactory, Person}
 
 
 object BasicMultiJvmNode1 {
+  scala.pickling.runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
+  scala.pickling.runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
+
   def main(args: Array[String]): Unit = {
     new Server(8090, new SystemImpl).run()
   }
 }
 
 object BasicMultiJvmNode2 extends SendUtils {
+  scala.pickling.runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
+  scala.pickling.runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
+
   val systemImpl = new SystemImpl
 
   val numPersons = 10
@@ -61,6 +67,34 @@ object BasicMultiJvmNode2 extends SendUtils {
     val sourceFut = system.fromFun(host)(populateSilo)
     Await.ready(sourceFut, 5.seconds)
 
+    testPumpTo(system, sourceFut, host)
+
+    val sourceFut2 = system.fromFun(host)(populateSilo)
+    for (_ <- 1 to 10) {
+      testPumpTo2(system, sourceFut, sourceFut2, host)
+    }
+
     system.waitUntilAllClosed()
+  }
+
+  def testPumpTo(system: SystemImpl, sourceFut: Future[SiloRef[Person, List[Person]]], host: Host): Unit = {
+    val fut = sourceFut.flatMap { source =>
+      val target = system.emptySilo[Person, List[Person]](host)
+      source.pumpTo(target)(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+      target.send()
+    }
+    val res = Await.result(fut, 15.seconds).asInstanceOf[List[Person]]
+    assert(res.size == 10)
+  }
+
+  def testPumpTo2(system: SystemImpl, sourceFut: Future[SiloRef[Person, List[Person]]], sourceFut2: Future[SiloRef[Person, List[Person]]], host: Host): Unit = {
+    val fut = sourceFut.zip(sourceFut2).flatMap { case (source1, source2) =>
+      val target = system.emptySilo[Person, List[Person]](host)
+      source1.pumpTo(target)(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+      source2.pumpTo(target)(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+      target.send()
+    }
+    val res = Await.result(fut, 15.seconds).asInstanceOf[List[Person]]
+    assert(res.size == 20)
   }
 }

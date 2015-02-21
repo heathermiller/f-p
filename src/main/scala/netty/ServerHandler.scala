@@ -24,12 +24,12 @@ class ServerHandler(system: SystemImpl, queue: BlockingQueue[HandleIncoming]) ex
   def systemImpl: SystemImpl = system
 
   override def channelActive(ctx: ChannelHandlerContext): Unit = {
-    println("SERVER: enter channelActive")
+    // println("SERVER: enter channelActive")
     sendToChannel(ctx.channel, s"Time: something")
   }
 
   override def channelRead(ctx: ChannelHandlerContext, msg: Object): Unit = {
-    println("SERVER: enter channelRead")
+    // println("SERVER: enter channelRead")
     queue.add(HandleIncoming(msg, ctx))
   }
 

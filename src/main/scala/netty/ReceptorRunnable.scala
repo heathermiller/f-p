@@ -14,8 +14,10 @@ import binary._
 
 import scala.collection.mutable
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{Future, Promise}
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{Future, Promise, Await}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.BlockingQueue
@@ -49,12 +51,12 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
       promise
   }
 
+  // PERF: instantiation is expensive, since it awaits a future for the destination channel
   private class RemoteEmitter[T](destHost: Host, emitterId: Int, destRefId: Int) extends Emitter[T] {
-    val destChannelFut = system.talkTo(destHost)
+    val destChannel = Await.result(system.talkTo(destHost), 5.seconds)
 
     def emit(v: T)(implicit pickler: Pickler[T], unpickler: Unpickler[T]): Unit = {
       // println(s"EMITTER [to $destRefId]: EMIT")
-      // println(s"using pickler of class type ${pickler.getClass.getName} to pickle $v")
 
       try {
         // 1. pickle value
@@ -70,24 +72,18 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         // 3. pickle SelfDescribing instance
         val sdp = sd.pickle
         val ba = sdp.value
-        // destNodeActor ! Emit(emitterId, destRefId, ba)
         val msg = Emit(emitterId, destRefId, ba)
-        destChannelFut.foreach { channel =>
-          // println(s"EMITTER [to $destRefId]: sending $msg")
-          system.sendToChannel(channel, msg)
-        }
+        // println(s"EMITTER [to $destRefId]: sending $msg")
+        system.sendToChannel(destChannel, msg)
       } catch {
         case t: Throwable =>
-          println(s"caught $t")
           t.printStackTrace()
       }
     }
+
     def done(): Unit = {
-      // destNodeActor ! Done(emitterId, destRefId)
       val msg = Done(emitterId, destRefId)
-      destChannelFut.foreach { channel =>
-        system.sendToChannel(channel, msg)
-      }
+      system.sendToChannel(destChannel, msg)
     }
   }
 
@@ -103,9 +99,8 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         println(s"SERVER: closing ${ctx.channel()}")
         ctx.close().sync()
 
-        val hosts = system.location.values.toList
-        for (h <- hosts) yield system.statusOf.get(h) match {
-          case Some(Connected(ch, group)) =>
+        for ((_, status) <- system.statusOf) status match {
+          case Connected(ch, group) =>
             println(s"SERVER: closing $ch")
             ch.close().sync()
             group.shutdownGracefully()
@@ -207,16 +202,21 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
             val fun = app.fun
             val promise = getOrElseInitPromise(app.refId)
 
-            val inputPromise = Promise[Option[Any]]()
-            println("handling Apply, app.input: " + app.input)
-            val localMsg = new HandleIncomingLocal(Graph(app.input), ctx, inputPromise)
-            queue.add(localMsg)
-            inputPromise.future.foreach { case Some(ForceResponse(value)) =>
-              println(s"yay: input graph is materialized")
-              val res = fun(value.asInstanceOf[t])
-              val newSilo = new LocalSilo[v, s](res)
-              promise.success(newSilo)
+            if (promise.isCompleted) {
+              val res = promise.future.value.get
               resultPromise.success(Some(ForceResponse(res)))
+            } else {
+              val inputPromise = Promise[Option[Any]]()
+              // println("handling Apply, app.input: " + app.input)
+              val localMsg = new HandleIncomingLocal(Graph(app.input), ctx, inputPromise)
+              queue.add(localMsg)
+              inputPromise.future.foreach { case Some(ForceResponse(value)) =>
+                // println(s"yay: input graph is materialized")
+                val res = fun(value.asInstanceOf[t])
+                val newSilo = new LocalSilo[v, s](res)
+                promise.success(newSilo)
+                resultPromise.success(Some(ForceResponse(res)))
+              }
             }
 
           case m: MultiInput[r] =>
@@ -241,7 +241,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
                 // send DoPumpTo messages to inputs
                 inputs.foreach { input =>
                   print("looking up src host...")
-                  val srcHost = system.location(input.from.refId)
+                  val srcHost = input.fromHost
                   println(s"$srcHost.")
                   system.talkTo(srcHost).map { channel =>
                     // must also send node (input.from), so that the input silo can be completed first
@@ -319,6 +319,27 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
 
     }
 
+  def unpickleAndHandle(arr: Array[Byte], ctx: ChannelHandlerContext): Unit = {
+    // TODO: unpickle asynchronously
+    val pickle = BinaryPickle(arr)
+    // println(s"SERVER: unpickling incoming byte array")
+    val command = try pickle.unpickle[Any] catch {
+      case t: Throwable =>
+        println(s"exception while attempting unpickle with runtime pickler:")
+        t.printStackTrace()
+    }
+    // println(s"SERVER: received $command")
+
+    val resultPromise = Promise[Option[Any]]()
+    handleIncomingLocal(command, ctx, resultPromise)
+    resultPromise.future.foreach {
+      case Some(replyMsg) => sendToChannel(ctx.channel(), replyMsg)
+      case None => /* do nothing */
+    }
+  }
+
+  var chunkStatus: Option[ReadStatus] = None
+
   /** Handle incoming message received via given channel.
    *
    *  @param msg  required to be a Netty `ByteBuf`
@@ -332,19 +353,61 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
     } finally {
       ReferenceCountUtil.release(msg)
     }
-    val arr = bos.toByteArray()
 
-    // TODO: unpickle asynchronously
-    val pickle = BinaryPickle(arr)
-    println(s"SERVER: unpickling incoming byte array")
-    val command = pickle.unpickle[Any]
-    println(s"SERVER: received $command")
+    var chunk = bos.toByteArray()
+    var finished = false
+    while (!finished) {
+      chunkStatus match {
+        case None => // have received first chunk
+          // read length (first 4 bytes)
+          var maxSize: Int = 0
+          maxSize |= (chunk(0) << 24)
+          maxSize |= (chunk(1) << 16) & 0xFF0000
+          maxSize |= (chunk(2) << 8 ) & 0xFF00
+          maxSize |= (chunk(3)      ) & 0xFF
+          // chunk complete?
+          if (chunk.length == maxSize + 4) {
+            // println(s"CHUNK: read chunk has EXACT size [$maxSize bytes]")
+            finished = true
+            unpickleAndHandle(chunk.drop(4), ctx)
+          } else if (chunk.length > maxSize + 4) {
+            val regularChunk = chunk.slice(4, maxSize + 4) //TODO: PERF
+            unpickleAndHandle(regularChunk, ctx)
+            // new chunk to process next in the loop
+            chunk = chunk.drop(maxSize + 4)
+          } else {
+            // println(s"CHUNK: read chunk has SMALLER size [read: ${chunk.length - 4} bytes, max: $maxSize bytes]")
+            finished = true
+            val done = Promise[Array[Byte]]()
+            done.future.foreach(ba => unpickleAndHandle(ba, ctx))
+            chunkStatus = Some(ReadStatus(maxSize, chunk.length - 4, ArrayBuffer(chunk.drop(4)), done))
+          }
 
-    val resultPromise = Promise[Option[Any]]()
-    handleIncomingLocal(command, ctx, resultPromise)
-    resultPromise.future.foreach {
-      case Some(replyMsg) => sendToChannel(ctx.channel(), replyMsg)
-      case None => /* do nothing */
+        case Some(status @ ReadStatus(maxSize, size, chunks, done)) =>
+          val newSize = size + chunk.length
+          if (newSize < maxSize) {
+            chunks += chunk
+            chunkStatus = Some(status.copy(currentSize = newSize))
+            finished = true
+          } else if (newSize == maxSize) {
+            chunks += chunk
+            chunkStatus = None
+            val arr = chunks.flatten.toArray
+            done.success(arr)
+            finished = true
+          } else if (newSize > maxSize) {
+            // chunk.length is too much
+            // use only maxSize - size elements from the current chunk
+            val useOnly = maxSize - size
+            val regularChunk = chunk.take(useOnly) //TODO: PERF
+            // new chunk to process next in the loop
+            chunk = chunk.drop(useOnly)
+            chunks += regularChunk
+            chunkStatus = None
+            val arr = chunks.flatten.toArray
+            done.success(arr)
+          }
+      }
     }
   }
 
