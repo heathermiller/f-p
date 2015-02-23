@@ -26,7 +26,7 @@ import graph._
 // emulates a node in the system
 class NodeActor(system: SiloSystemInternal) extends Actor {
 
-  implicit val timeout: Timeout = 30.seconds
+  implicit val timeout: Timeout = 300.seconds
 
   //TODO: do we need to use TrieMap here?
   val builderOfEmitterId: mutable.Map[Int, (AbstractBuilder, Int, Int)] = new TrieMap[Int, (AbstractBuilder, Int, Int)]

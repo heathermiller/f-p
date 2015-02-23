@@ -77,7 +77,7 @@ class SystemImpl extends SiloSystem with SiloSystemInternal {
   // the system actor creates a few node actors
   private val systemActor = actorSystem.actorOf(Props(new SystemActor(this)))
 
-  private implicit val timeout: Timeout = 30.seconds
+  private implicit val timeout: Timeout = 300.seconds
 
   def start(): Future[Boolean] = {
     (systemActor ? StartNodeActors).map { x => true }
@@ -99,7 +99,7 @@ class SystemImpl extends SiloSystem with SiloSystemInternal {
 
   def waitUntilAllClosed(): Unit = {
     val done = systemActor ? Terminate
-    Await.ready(done, 30.seconds)
+    Await.ready(done, 300.seconds)
     actorSystem.shutdown()
   }
 
