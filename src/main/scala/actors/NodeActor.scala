@@ -174,7 +174,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       }
 
     case msg @ Graph(n) =>
-      println(s"node actor: received graph with node $n")
+      // println(s"node actor: received graph with node $n")
 
       n match {
         // expect a ForceResponse(value)
@@ -251,7 +251,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       }
 
       // kick off materialization
-      println(s"NODE ${node.refId}: kick off materialization by sending Graph($node)")
+      // println(s"NODE ${node.refId}: kick off materialization by sending Graph($node)")
       self ! Graph(node)
 
     /*
