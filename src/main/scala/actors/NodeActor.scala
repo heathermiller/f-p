@@ -55,10 +55,13 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
 
       try {
         // 1. pickle value
+/*
         val builder = pickleFormat.createBuilder()
         builder.hintTag(pickler.tag)
         pickler.pickle(v, builder)
         val p = builder.result()
+*/
+        val p = (v: Any).pickle
         numPickled.incrementAndGet()
 
         // 2. create SelfDescribing instance
@@ -297,7 +300,9 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
           val pickle = BinaryPickleArray(ba.asInstanceOf[Array[Byte]])
             // JSONPickle(ba.asInstanceOf[String])
           val sdv = pickle.unpickle[SelfDescribing] // *static* unpickling
-          val v = sdv.result()
+          // val v = sdv.result()
+          val pickle0 = BinaryPickleArray(sdv.blob)
+          val v = pickle0.unpickle[Any] // runtime unpickling
           // println(s"received ${v.toString}")
           val stableBuilder = builder
           stableBuilder += v.asInstanceOf[stableBuilder.Elem]
