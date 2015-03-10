@@ -9,7 +9,7 @@ lazy val root = (project in file(".")).
     scalaVersion := "2.11.4",
     resolvers += Resolver.sonatypeRepo("snapshots"),
     libraryDependencies ++= Seq(
-      "org.scala-lang.modules" %% "scala-pickling" % "0.10.0",
+      // "org.scala-lang.modules" %% "scala-pickling" % "0.10.0",
       "org.scala-lang.modules" %% "spores-core" % "0.1.1-SNAPSHOT",
       "org.scala-lang.modules" %% "spores-pickling" % "0.1.1-SNAPSHOT",
       "io.netty" % "netty-all" % "4.0.4.Final",

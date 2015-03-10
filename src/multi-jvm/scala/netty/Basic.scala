@@ -80,7 +80,8 @@ object BasicMultiJvmNode2 extends SendUtils {
   def testPumpTo(system: SystemImpl, sourceFut: Future[SiloRef[Person, List[Person]]], host: Host): Unit = {
     val fut = sourceFut.flatMap { source =>
       val target = system.emptySilo[Person, List[Person]](host)
-      source.pumpTo(target)(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+      val s = spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) }
+      source.pumpTo(target)(s)
       target.send()
     }
     val res = Await.result(fut, 15.seconds).asInstanceOf[List[Person]]
@@ -90,8 +91,9 @@ object BasicMultiJvmNode2 extends SendUtils {
   def testPumpTo2(system: SystemImpl, sourceFut: Future[SiloRef[Person, List[Person]]], sourceFut2: Future[SiloRef[Person, List[Person]]], host: Host): Unit = {
     val fut = sourceFut.zip(sourceFut2).flatMap { case (source1, source2) =>
       val target = system.emptySilo[Person, List[Person]](host)
-      source1.pumpTo(target)(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
-      source2.pumpTo(target)(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+      val s = spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) }
+      source1.pumpTo(target)(s)
+      source2.pumpTo(target)(s)
       target.send()
     }
     val res = Await.result(fut, 15.seconds).asInstanceOf[List[Person]]

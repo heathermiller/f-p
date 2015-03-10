@@ -90,7 +90,8 @@ object WordCountMultiJvmNode3 {
 
     val res1Fut = silo1Fut.flatMap { silo =>
       val tmp = reducedPairs(silo)
-      tmp.pumpTo(target)(spore { (elem: (String, Int), emit: Emitter[(String, Int)]) => emit.emit(elem) })
+      val s = spore { (elem: (String, Int), emit: Emitter[(String, Int)]) => emit.emit(elem) }
+      tmp.pumpTo(target)(s)
       tmp.send()
     }
     val res1 = Await.result(res1Fut, 5.seconds)
@@ -100,7 +101,8 @@ object WordCountMultiJvmNode3 {
 
     val res2Fut = silo2Fut.flatMap { silo =>
       val tmp = reducedPairs(silo)
-      tmp.pumpTo(target)(spore { (elem: (String, Int), emit: Emitter[(String, Int)]) => emit.emit(elem) })
+      val s = spore { (elem: (String, Int), emit: Emitter[(String, Int)]) => emit.emit(elem) }
+      tmp.pumpTo(target)(s)
       tmp.send()
     }
     val res2 = Await.result(res2Fut, 5.seconds)

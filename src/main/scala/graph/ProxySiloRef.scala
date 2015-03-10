@@ -12,7 +12,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import Picklers._
 
 
-final case class PumpToInput[T <: Traversable[U], U, V, R <: Traversable[_]](from: ProxySiloRef[U, T], fun: (U, Emitter[V]) => Unit, bf: BuilderFactory[V, R])
+final case class PumpToInput[T <: Traversable[U], U, V, R <: Traversable[_], P <: Spore2[U, Emitter[V], Unit]](from: ProxySiloRef[U, T], fun: P, pickler: Pickler[P], unpickler: Unpickler[P], bf: BuilderFactory[V, R])
 
 // IDEA: create ref ids immediately, as well as emitter ids
 abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(implicit system: SiloSystemInternal) extends SiloRef[W, T] {
@@ -26,10 +26,10 @@ abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(
     new ApplySiloRef[W, T, V, S](this, newRefId, g, pickler, unpickler)
   }
 
-  override def pumpTo[V, R <: Traversable[V]](destSilo: SiloRef[V, R])(fun: Spore2[W, Emitter[V], Unit])
-                                             (implicit bf: BuilderFactory[V, R], pickler: Pickler[V], unpickler: Unpickler[V]): Unit = {
+  override def pumpTo[V, R <: Traversable[V], P <: Spore2[W, Emitter[V], Unit]](destSilo: SiloRef[V, R])(fun: P)
+                                             (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = {
     // register `this` SiloRef as pump input for `destSilo`
-    destSilo.asInstanceOf[ProxySiloRef[V, R]].addInput(PumpToInput(this, fun, bf))
+    destSilo.asInstanceOf[ProxySiloRef[V, R]].addInput(PumpToInput(this, fun, pickler, unpickler, bf))
   }
 
   def send(): Future[T] = {
@@ -46,9 +46,9 @@ abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(
 
   def node(): Node
 
-  protected var inputs = List[PumpToInput[_, _, _, T]]()
+  protected var inputs = List[PumpToInput[_, _, _, T, _]]()
 
-  def addInput[S <: Traversable[U], U, V](input: PumpToInput[S, U, V, T]): Unit = {
+  def addInput[S <: Traversable[U], U, V](input: PumpToInput[S, U, V, T, _]): Unit = {
     inputs ::= input
   }
 
@@ -76,10 +76,10 @@ class MaterializedSiloRef[U, T <: Traversable[U]](val refId: Int, host: Host)(im
 class EmptySiloRef[U, T <: Traversable[U]](val refId: Int, host: Host)(implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId, host) {
   val emitterId = system.emitterIds.incrementAndGet()
   def node(): Node = {
-    val nodeInputs = inputs.map { case pumpToInput: PumpToInput[s, u, v, T] =>
+    val nodeInputs = inputs.map { case pumpToInput: PumpToInput[s, u, v, T, p] =>
       val fromNode = pumpToInput.from.node()
       println(s"empty silo $refId has input ${fromNode.refId}")
-      PumpNodeInput[u, v, T](fromNode, pumpToInput.from.host, pumpToInput.fun, pumpToInput.bf)
+      PumpNodeInput[u, v, T, p](fromNode, pumpToInput.from.host, pumpToInput.fun.asInstanceOf[p], pumpToInput.pickler.asInstanceOf[Pickler[p]], pumpToInput.unpickler.asInstanceOf[Unpickler[p]], pumpToInput.bf)
     }
     new MultiInput(nodeInputs, refId, host, emitterId)
   }

@@ -2,6 +2,7 @@ package silt
 package demo
 
 import scala.spores._
+import SporePickler._
 
 import scala.pickling._
 import Defaults._
@@ -74,11 +75,13 @@ object Demo {
     // fill up silos according to age group
     ageGroupSilos.zipWithIndex.foreach {
       case (silo, i) =>
-        mapped.pumpTo(silo)(spore {
+        val s = spore {
           val localIndex = i
+          val localIndex2 = i + 1
           (elem: (Int, List[Person]), emit: Emitter[Person]) =>
             if (elem._1 == localIndex) elem._2.foreach { person => emit.emit(person) }
-        })
+        }
+        mapped.pumpTo(silo)(s)
     }
     ageGroupSilos
   }

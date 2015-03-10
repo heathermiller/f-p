@@ -19,15 +19,16 @@ final case class Materialized(refId: Int) extends Node
 final case class Apply[U, T <: Traversable[U], V, S <: Traversable[V]]
                       (input: Node, refId: Int, fun: T => S, pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]) extends Node
 
-final case class MultiInput[R](inputs: Seq[PumpNodeInput[_, _, R]], refId: Int, destHost: Host, emitterId: Int) extends Node
+final case class MultiInput[R](inputs: Seq[PumpNodeInput[_, _, R, _]], refId: Int, destHost: Host, emitterId: Int) extends Node
 
-final case class PumpNodeInput[U, V, R](from: Node, fromHost: Host, fun: (U, Emitter[V]) => Unit, bf: BuilderFactory[V, R])
+final case class PumpNodeInput[U, V, R, P](from: Node, fromHost: Host, fun: P,
+  pickler: Pickler[P], unpickler: Unpickler[P], bf: BuilderFactory[V, R])
 
 // remote message
 final case class Graph(node: Node) extends ReplyMessage
 
 sealed abstract class Command
 // remote message
-case class DoPumpTo[A, B](node: Node, fun: (A, Emitter[B]) => Unit, emitterId: Int, destHost: Host, destRefId: Int) extends Command
+case class DoPumpTo[A, B, P](node: Node, fun: P, pickler: Pickler[P], unpickler: Unpickler[P], emitterId: Int, destHost: Host, destRefId: Int) extends Command
 
 case class CommandEnvelope(cmd: Command)

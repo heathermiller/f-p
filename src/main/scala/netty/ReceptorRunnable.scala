@@ -239,14 +239,14 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
                 val triple = (builder, 0, inputs.size)
                 builderOfEmitterId += (emitterId -> triple)
                 // send DoPumpTo messages to inputs
-                inputs.foreach { input =>
+                inputs.foreach { case input: PumpNodeInput[u, v, r, p] =>
                   print("looking up src host...")
                   val srcHost = input.fromHost
                   println(s"$srcHost.")
                   system.talkTo(srcHost).map { channel =>
                     // must also send node (input.from), so that the input silo can be completed first
                     println(s"NODE $refId: sending DoPumpTo to ${input.from.refId}")
-                    val msg = CommandEnvelope(DoPumpTo(input.from, input.fun, emitterId, destHost, refId))
+                    val msg = CommandEnvelope(DoPumpTo(input.from, input.fun, input.pickler, input.unpickler, emitterId, destHost, refId))
                     system.sendToChannel(channel, msg)
                   }
                 }
@@ -260,7 +260,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
             throw new Exception("boom")
         }
 
-      case CommandEnvelope(pump: DoPumpTo[a, b]) =>
+      case CommandEnvelope(pump: DoPumpTo[a, b, p]) =>
         val node      = pump.node
         val fun       = pump.fun
         val emitterId = pump.emitterId
@@ -275,7 +275,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         val promise = getOrElseInitPromise(node.refId)
         promise.future.foreach { localSilo =>
           // println(s"SERVER: calling doPumpTo on $localSilo (${localSilo.value})")
-          localSilo.doPumpTo[a, b](fun, emitter)
+          localSilo.doPumpTo[a, b](fun.asInstanceOf[(a, silt.Emitter[b]) => Unit], emitter)
         }
 
         // kick off materialization

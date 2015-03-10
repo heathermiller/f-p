@@ -122,12 +122,12 @@ object DemoClient {
       group11.pumpTo(group1)(spore {
         implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
-        (elem, emit) => if (elem._1 == 0) emit.emit(elem)
+        (elem: (Int, List[String]), emit: Emitter[(Int, List[String])]) => if (elem._1 == 0) emit.emit(elem)
       })
       group21.pumpTo(group1)(spore {
         implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
-        (elem, emit) => if (elem._1 == 0) emit.emit(elem)
+        (elem: (Int, List[String]), emit: Emitter[(Int, List[String])]) => if (elem._1 == 0) emit.emit(elem)
       })
 
       // merge group12 and group22
@@ -135,12 +135,12 @@ object DemoClient {
       group12.pumpTo(group2)(spore {
         implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
-        (elem, emit) => if (elem._1 == 1) emit.emit(elem)
+        (elem: (Int, List[String]), emit: Emitter[(Int, List[String])]) => if (elem._1 == 1) emit.emit(elem)
       })
       group22.pumpTo(group2)(spore {
         implicit val localPickler = pickler
         implicit val localUnpickler = unpickler
-        (elem, emit) => if (elem._1 == 1) emit.emit(elem)
+        (elem: (Int, List[String]), emit: Emitter[(Int, List[String])]) => if (elem._1 == 1) emit.emit(elem)
       })
 
       group1.send().zip(group2.send())

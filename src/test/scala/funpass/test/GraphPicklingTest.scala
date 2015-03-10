@@ -18,7 +18,11 @@ class GraphPicklingTest {
   // need an Apply node
   // pickle a CommandEnvelope
 
-  // @Test def testSpore2
+  implicit val sp1 = implicitly[Pickler[Spore2[Int, Emitter[Int], Unit]]]
+  implicit val sup1 = implicitly[Unpickler[Spore2[Int, Emitter[Int], Unit]]]
+
+  implicit val sp2 = implicitly[Pickler[Spore2[(String, Int), Emitter[String], Unit]]]
+  implicit val sup2 = implicitly[Unpickler[Spore2[(String, Int), Emitter[String], Unit]]]
 
   @Test def testPickleGraph(): Unit = {
     runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
@@ -28,9 +32,10 @@ class GraphPicklingTest {
     val destHost = Host("127.0.0.1", 8092)
     val from: Node = Materialized(1)
 
-    val pni = PumpNodeInput[Int, Int, List[Int]](from, fromHost, spore {
+    val s = spore {
       (elem: Int, emit: Emitter[Int]) => emit.emit(elem)
-    }, new ListBuilderFactory[Int])
+    }
+    val pni = PumpNodeInput(from, fromHost, s, sp1, sup1, new ListBuilderFactory[Int])
 
     val inputs = List(pni)
     // 3 = emitterId

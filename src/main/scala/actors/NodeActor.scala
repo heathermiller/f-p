@@ -220,12 +220,12 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
               val triple = (builder, 0, inputs.size)
               builderOfEmitterId += (emitterId -> triple)
               // send DoPumpTo messages to inputs
-              inputs.foreach { input =>
+              inputs.foreach { case input: PumpNodeInput[u, v, r, p] =>
                 val host = system.location(input.from.refId)
                 val inputNodeActor = Config.m(host)
                 // must also send node (input.from), so that the input silo can be completed first
                 println(s"NODE $refId: sending DoPumpTo to ${input.from.refId}")
-                inputNodeActor ! DoPumpTo(input.from, input.fun, emitterId, system.location(refId), refId)
+                inputNodeActor ! DoPumpTo[u, v, p](input.from, input.fun.asInstanceOf[p], input.pickler, input.unpickler, emitterId, system.location(refId), refId)
               }
               // register completion for responding with ForceResponse
               promise.future.foreach { (silo: LocalSilo[_, _]) =>
@@ -235,7 +235,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       }
 
     // case class DoPumpTo[A, B](node: Node, fun: (A, Emitter[B]) => Unit, emitterId: Int, destHost: Host, destRefId: Int)
-    case pump: DoPumpTo[a, b] =>
+    case pump: DoPumpTo[a, b, p] =>
       val node      = pump.node
       val fun       = pump.fun
       val emitterId = pump.emitterId
@@ -250,7 +250,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       val promise = getOrElseInitPromise(node.refId)
       promise.future.foreach { localSilo =>
         // println(s"SERVER: calling doPumpTo on local Silo (${localSilo.value})")
-        localSilo.doPumpTo[a, b](fun, emitter)
+        localSilo.doPumpTo[a, b](fun.asInstanceOf[(a, Emitter[b]) => Unit], emitter)
       }
 
       // kick off materialization
