@@ -19,6 +19,9 @@ final case class Materialized(refId: Int) extends Node
 final case class Apply[U, T <: Traversable[U], V, S <: Traversable[V]]
                       (input: Node, refId: Int, fun: T => S, pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]) extends Node
 
+final case class FMapped[U, T <: Traversable[U], V, S <: Traversable[V]]
+                        (input: Node, refId: Int, fun: T => SiloRef[V, S], pickler: Pickler[Spore[T, SiloRef[V, S]]], unpickler: Unpickler[Spore[T, SiloRef[V, S]]]) extends Node
+
 final case class MultiInput[R](inputs: Seq[PumpNodeInput[_, _, R, _]], refId: Int, destHost: Host, emitterId: Int) extends Node
 
 final case class PumpNodeInput[U, V, R, P](from: Node, fromHost: Host, fun: P,

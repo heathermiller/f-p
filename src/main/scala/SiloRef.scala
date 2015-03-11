@@ -1,10 +1,7 @@
 package silt
 
-import scala.spores._
-
-import scala.pickling._
-import Defaults._
-import binary._
+import scala.spores.{Spore, Spore2}
+import scala.pickling.{Pickler, Unpickler}
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -39,6 +36,9 @@ trait SiloRef[W, T <: Traversable[W]] {
 
   def pumpTo[V, R <: Traversable[V], P <: Spore2[W, Emitter[V], Unit]](destSilo: SiloRef[V, R])(fun: P)
                                     (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = ???
+
+  def flatMap[V, S <: Traversable[V]](fun: Spore[T, SiloRef[V, S]])
+                                     (implicit pickler: Pickler[Spore[T, SiloRef[V, S]]], unpickler: Unpickler[Spore[T, SiloRef[V, S]]]): SiloRef[V, S] = ???
 
   def id: SiloRefId
 
