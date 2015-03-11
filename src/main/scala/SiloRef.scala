@@ -6,20 +6,11 @@ import scala.pickling._
 import Defaults._
 import binary._
 
-import scala.concurrent.{Future, Promise, Await}
+import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
 
 import scala.collection.Traversable
 
-
-/*
-object SiloRef {
-  def apply[T](v: T): SiloRef[T] = {
-    new LocalSilo(v)
-  }
-}
-*/
 
 trait SiloRef[W, T <: Traversable[W]] {
   def apply[V, S <: Traversable[V]](fun: Spore[T, S])
@@ -41,14 +32,6 @@ final case class SiloRefId(value: Int)
 
 // this does not extend SiloRef. Silos and SiloRefs are kept separate.
 class LocalSilo[U, T <: Traversable[U]](private[silt] val value: T) {
-/*
-  def apply[S](fun: T => S): SiloRef[S] = {
-    println(s"LocalSiloRef: value = $value")
-    val res = fun(value)
-    println(s"LocalSiloRef: result of applying function: $res")
-    new LocalSilo(res)
-  }
-*/
 
   def internalApply[A, V, B <: Traversable[V]](fun: A => B): LocalSilo[V, B] = {
     val typedFun = fun.asInstanceOf[T => B]

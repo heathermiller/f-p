@@ -43,9 +43,6 @@ import Defaults._
 import binary._
 
 
-// Promise `done` is completed with the entire array composed of all chunks
-final case class ReadStatus(maxSize: Int, currentSize: Int, chunks: ArrayBuffer[Array[Byte]], done: Promise[Array[Byte]])
-
 // For each channel a separate `ClientHandler` is instantiated
 abstract class ClientHandler extends ChannelInboundHandlerAdapter with SendUtils {
   var chunkStatus: Option[ReadStatus] = None
@@ -83,9 +80,22 @@ abstract class ClientHandler extends ChannelInboundHandlerAdapter with SendUtils
     }
 
     var chunk = bos.toByteArray()
+
+    chunkStatus match {
+      case Some(PartialStatus(prevArr)) =>
+        chunk = prevArr ++ chunk
+        chunkStatus = None
+      case _ =>
+        // do nothing (handle later)
+    }
+
     var finished = false
     while (!finished) {
       chunkStatus match {
+        case None if chunk.length < 4 =>
+          finished = true
+          chunkStatus = Some(PartialStatus(chunk))
+
         case None => // have received first chunk
           // read length (first 4 bytes)
           var maxSize: Int = 0
@@ -108,10 +118,10 @@ abstract class ClientHandler extends ChannelInboundHandlerAdapter with SendUtils
             finished = true
             val done = Promise[Array[Byte]]()
             done.future.foreach(unpickleAndHandle)
-            chunkStatus = Some(ReadStatus(maxSize, chunk.length - 4, ArrayBuffer(chunk.drop(4)), done))
+            chunkStatus = Some(ChunkStatus(maxSize, chunk.length - 4, ArrayBuffer(chunk.drop(4)), done))
           }
 
-        case Some(status @ ReadStatus(maxSize, size, chunks, done)) =>
+        case Some(status @ ChunkStatus(maxSize, size, chunks, done)) =>
           val newSize = size + chunk.length
           if (newSize < maxSize) {
             chunks += chunk

@@ -355,9 +355,22 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
     }
 
     var chunk = bos.toByteArray()
+
+    chunkStatus match {
+      case Some(PartialStatus(prevArr)) =>
+        chunk = prevArr ++ chunk
+        chunkStatus = None
+      case _ =>
+        // do nothing (handle later)
+    }
+
     var finished = false
     while (!finished) {
       chunkStatus match {
+        case None if chunk.length < 4 =>
+          finished = true
+          chunkStatus = Some(PartialStatus(chunk))
+
         case None => // have received first chunk
           // read length (first 4 bytes)
           var maxSize: Int = 0
@@ -380,10 +393,10 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
             finished = true
             val done = Promise[Array[Byte]]()
             done.future.foreach(ba => unpickleAndHandle(ba, ctx))
-            chunkStatus = Some(ReadStatus(maxSize, chunk.length - 4, ArrayBuffer(chunk.drop(4)), done))
+            chunkStatus = Some(ChunkStatus(maxSize, chunk.length - 4, ArrayBuffer(chunk.drop(4)), done))
           }
 
-        case Some(status @ ReadStatus(maxSize, size, chunks, done)) =>
+        case Some(status @ ChunkStatus(maxSize, size, chunks, done)) =>
           val newSize = size + chunk.length
           if (newSize < maxSize) {
             chunks += chunk
