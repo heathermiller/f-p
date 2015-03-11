@@ -1,10 +1,14 @@
-f-p
-===
+# Function Passing: Typed, Distributed Functional Programming
 
-Open 2 terminals. In the 1st terminal we start the server:
+The `F-P` library uses [sbt](http://www.scala-sbt.org/) for building and
+testing. Distributed tests and examples are supported using the
+[sbt-multi-jvm](https://github.com/sbt/sbt-multi-jvm) sbt plug-in.
 
-    $ scala -cp classes:lib/netty-4.0.jar:lib/pickling-0.9.jar:lib/quasiquotes_2.10-2.0.0.jar silt.netty.Server 8090
+## How to Run Examples and Tests
 
-In the 2nd terminal we start the client:
+Examples and tests can be launched from the sbt prompt:
 
-    $ scala -cp classes:lib/netty-4.0.jar:lib/pickling-0.9.jar:lib/quasiquotes_2.10-2.0.0.jar silt.netty.Client
+```
+> multi-jvm:run netty.Basic
+> multi-jvm:run netty.WordCount
+```
