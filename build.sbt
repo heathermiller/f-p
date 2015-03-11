@@ -10,8 +10,8 @@ lazy val root = (project in file(".")).
     resolvers += Resolver.sonatypeRepo("snapshots"),
     libraryDependencies ++= Seq(
       // "org.scala-lang.modules" %% "scala-pickling" % "0.10.0",
-      "org.scala-lang.modules" %% "spores-core" % "0.1.1-SNAPSHOT",
-      "org.scala-lang.modules" %% "spores-pickling" % "0.1.1-SNAPSHOT",
+      "org.scala-lang.modules" %% "spores-core" % "0.1.1",
+      "org.scala-lang.modules" %% "spores-pickling" % "0.1.1",
       "io.netty" % "netty-all" % "4.0.4.Final",
       "com.typesafe.akka" % "akka-actor_2.11" % "2.3.6",
       "junit" % "junit-dep" % "4.10" % "test",
