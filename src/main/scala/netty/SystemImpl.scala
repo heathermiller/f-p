@@ -1,7 +1,11 @@
 package silt
 package netty
 
+import scala.reflect.{ClassTag, classTag}
+
 import scala.pickling._
+import Defaults._
+import runtime.GlobalRegistry
 import binary._
 
 import _root_.io.netty.bootstrap.Bootstrap
@@ -26,16 +30,19 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 
+import graph._
+import Picklers._
+
 
 // needs a way to talk to servers on other nodes
 // mapping from port to Bootstrap?
-class SystemImpl extends SiloSystem with SendUtils {
+class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
   self =>
 
   def systemImpl = self
 
   // connection status
-  val statusOf: mutable.Map[Address, Status] = new TrieMap[Address, Status]
+  val statusOf: mutable.Map[Host, ConnectionStatus] = new TrieMap[Host, ConnectionStatus]
 
   // replies
   val promiseOf: mutable.Map[Int, Promise[Any]] = new TrieMap[Int, Promise[Any]]
@@ -43,13 +50,22 @@ class SystemImpl extends SiloSystem with SendUtils {
   // SiloRef map
   val localSiloRefOf: mutable.Map[Int, LocalSilo[_, _]] = new TrieMap[Int, LocalSilo[_, _]]
 
-  val seqNum = new AtomicInteger(10)
-  val refIds = new AtomicInteger(0)
-  val emitterIds = new AtomicInteger(0)
-
   val lock = new ReentrantLock
 
   val latch = new CountDownLatch(1)
+
+  def register[T: ClassTag: Pickler: Unpickler](): Unit = {
+   val clazz = classTag[T].runtimeClass
+   val p = implicitly[Pickler[T]]
+   val up = implicitly[Unpickler[T]]
+   // println(s"registering for ${clazz.getName()} pickler of class type ${p.getClass.getName}...")
+   GlobalRegistry.picklerMap += (clazz.getName() -> (x => p))
+   GlobalRegistry.unpicklerMap += (clazz.getName() -> up)
+  }
+
+  register[graph.Graph]
+
+  def start(): Future[Boolean] = Future.successful(true)
 
   def initChannel(host: String, port: Int): Future[Connected] = {
     println(s"init channel to port $port...")
@@ -97,15 +113,14 @@ class SystemImpl extends SiloSystem with SendUtils {
     }
   }
 
-  def talkTo(host: String, port: Int): Future[Channel] = {
-    val a = Address(host, port)
-    val futChannel = statusOf.get(a) match {
+  def talkTo(host: Host): Future[Channel] = {
+    val futChannel = statusOf.get(host) match {
       case None =>
-        val chFut = initChannel(host, port)
+        val chFut = initChannel(host.address, host.port)
         val p = Promise[Channel]()
         chFut.onComplete {
           case Success(conn @ Connected(channel, _)) =>
-            statusOf += (a -> conn)
+            statusOf += (host -> conn)
             p.success(channel)
           case Failure(t) =>
             p.failure(t)
@@ -125,21 +140,23 @@ class SystemImpl extends SiloSystem with SendUtils {
     }
   }
 
-  def fromClass[U, T <: Traversable[U]](clazz: Class[_], h: Host): Future[SiloRef[U, T]] = {
-    val port  = h.port
-    val host  = h.host
-    val refId = refIds.incrementAndGet() - 1
-    println(s"fromClass: connecting to $host:$port...")
-    val futChannel = talkTo(host, port)
-
-    futChannel.flatMap { channel =>
-      val msg = InitSilo(clazz.getName(), refId)
-      msg.id = seqNum.incrementAndGet()
-      sendWithReply(channel, msg)
-    }.map { x =>
+  // effects: refIds, seqNum, location
+  def initRequest[U, T <: Traversable[U], V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[U, T]] = {
+    val refId = refIds.incrementAndGet()
+    val msg   = mkMsg(refId)
+    msg.id    = seqNum.incrementAndGet()
+    location += (refId -> host)
+    println(s"initRequest: connecting to $host...")
+    send(host, msg).map { x =>
+      println("SystemImpl: got response for InitSilo msg")
       // create a typed wrapper
-      new RemoteSiloRef(SiloRefId(refId), self)
+      new MaterializedSiloRef[U, T](refId, host)(this)
     }
   }
 
+  def send[T <: ReplyMessage : Pickler](host: Host, msg: T): Future[Any] =
+    talkTo(host).flatMap(channel => sendWithReply(channel, msg).map {
+      case ForceResponse(v) => v
+      case msg => msg
+    })
 }

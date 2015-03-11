@@ -3,6 +3,7 @@ package siltx
 import akka.actor.{ActorRef, Actor, ActorSystem, Props}
 
 import scala.pickling._
+import Defaults._
 import binary._
 
 import scala.collection.Traversable
@@ -17,7 +18,7 @@ class ActorEmitter[T, R](ref: ActorRef, builder: AbstractBuilder { type Elem = T
   // first, send builder
   ref ! builder
 
-  def emit(v: T)(implicit pickler: SPickler[T], tag: FastTypeTag[T], unpickler: Unpickler[T]): Unit = {
+  def emit(v: T)(implicit pickler: Pickler[T], unpickler: Unpickler[T]): Unit = {
     // has to be sent to actor in pre-serialized form
     val ba = v//.pickle.value
     ref ! ba

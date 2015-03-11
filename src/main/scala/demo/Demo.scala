@@ -2,8 +2,10 @@ package silt
 package demo
 
 import scala.spores._
+import SporePickler._
 
 import scala.pickling._
+import Defaults._
 import binary._
 
 import silt.actors._
@@ -26,9 +28,9 @@ object PersonOrdering extends Ordering[Person] {
   }
 }
 
-object Demo extends App {
+object Demo {
 
-  def populateSilo(): LocalSilo[Person, List[Person]] = {
+  def populateSilo(numPersons: Int): LocalSilo[Person, List[Person]] = {
     val persons: List[Person] = for (_ <- (1 to numPersons).toList) yield {
       val randomId  = Random.nextInt(10000000)
       val randomAge = Random.nextInt(100)
@@ -57,7 +59,7 @@ object Demo extends App {
   }
 
   // called for each tree silo
-  def localGroups(host: Host, silo: SiloRef[(Int, Person), TreeMap[Int, Person]]): List[SiloRef[Person, List[Person]]] = {
+  def localGroups(system: SystemImpl, host: Host, silo: SiloRef[(Int, Person), TreeMap[Int, Person]]): List[SiloRef[Person, List[Person]]] = {
     // result type of groupBy: Map[Int, TreeMap[Int, Person]]
     val mapped: SiloRef[(Int, List[Person]), Map[Int, List[Person]]] =
       silo.apply(spore { x =>
@@ -73,105 +75,111 @@ object Demo extends App {
     // fill up silos according to age group
     ageGroupSilos.zipWithIndex.foreach {
       case (silo, i) =>
-        mapped.pumpTo(silo)(spore {
+        val s = spore {
           val localIndex = i
+          val localIndex2 = i + 1
           (elem: (Int, List[Person]), emit: Emitter[Person]) =>
             if (elem._1 == localIndex) elem._2.foreach { person => emit.emit(person) }
-        })
+        }
+        mapped.pumpTo(silo)(s)
     }
     ageGroupSilos
   }
 
   implicit val theUnpickler = implicitly[Unpickler[Person]]
 
-  // benchmark parameters
-  val numPersons = 100000 //10000 //1000000
-  val numSearches = 10000
+  def main(args: Array[String]): Unit = {
+    // benchmark parameters
+    val numPersons =
+      if (args.length > 0) args(0).toInt
+      else 100000 //10000 //1000000
+    val numSearches = 10000
 
-  // create Silo system
-  val system = new SystemImpl
-  val started = system.start()
-  Await.ready(started, 1.seconds)
+    // create Silo system
+    val system = new SystemImpl
+    val started = system.start()
+    Await.ready(started, 1.seconds)
 
-  val hosts = for (port <- List(8090, 8091, 8092, 8093)) yield Host("127.0.0.1", port)
+    val hosts = for (port <- List(8090, 8091, 8092, 8093)) yield Host("127.0.0.1", port)
 
 
-  // put into Silos
-  val origSiloFuts = hosts.map { host => system.fromFun(host)(populateSilo) }
-  val futOrigSilos = Future.sequence(origSiloFuts)
+    // put into Silos
+    val origSiloFuts = hosts.map { host => system.fromFun(host)(() => populateSilo(numPersons)) }
+    val futOrigSilos = Future.sequence(origSiloFuts)
 
-  val done = futOrigSilos.flatMap { origSilos =>
-    // tree for each silo
-    val treeSilos: List[SiloRef[(Int, Person), TreeMap[Int, Person]]] =
-      for (silo <- origSilos) yield silo.apply[(Int, Person), TreeMap[Int, Person]] { persons =>
-        var personsTree = TreeMap.empty[Int, Person]
+    val done = futOrigSilos.flatMap { origSilos =>
+      // tree for each silo
+      val treeSilos: List[SiloRef[(Int, Person), TreeMap[Int, Person]]] =
+        for (silo <- origSilos) yield silo.apply[(Int, Person), TreeMap[Int, Person]] { persons =>
+          var personsTree = TreeMap.empty[Int, Person]
+          for (person <- persons) {
+            personsTree = personsTree + (person.id -> person)
+          }
+          personsTree
+        }
+
+      // create a group for each silo
+      val groups: List[List[SiloRef[Person, List[Person]]]] = for ((treeSilo, host) <- treeSilos.zip(hosts)) yield {
+        localGroups(system, host, treeSilo)
+      }
+
+      val silos12 = for (i <- 0 until 4) yield
+        system.emptySilo[Person, List[Person]](hosts(i % 2))
+
+      groups(0).zip(groups(1)).zipWithIndex.map {
+        case ((leftSilo, rightSilo), i) =>
+          leftSilo.pumpTo(silos12(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+          rightSilo.pumpTo(silos12(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+      }
+
+      val silos34 = for (i <- 0 until 4) yield
+        system.emptySilo[Person, List[Person]](hosts((i % 2) + 2))
+
+      groups(2).zip(groups(3)).zipWithIndex.map {
+        case ((leftSilo, rightSilo), i) =>
+          leftSilo.pumpTo(silos34(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+          rightSilo.pumpTo(silos34(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+      }
+
+      // final merge
+      val finalSilos = for (i <- 0 until 4) yield
+        system.emptySilo[Person, List[Person]](hosts(i))
+
+      silos12.zip(silos34).zipWithIndex.map {
+        case ((leftSilo, rightSilo), i) =>
+          leftSilo.pumpTo(finalSilos(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+          rightSilo.pumpTo(finalSilos(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
+      }
+
+      // check results
+      val groupFuts = for (i <- 0 until 4) yield
+        finalSilos(i).apply[Person, List[Person]](persons => persons.take(10)).send()
+      Future.sequence(groupFuts)
+    }
+
+    // use apply to put it into a Silo with a search tree
+    // closure passed to apply uses a "specialized" way of building the tree
+  /*
+    val groups1 = fut1.flatMap { silo =>
+      val treeSilo: SiloRef[(Int, Person), TreeMap[Int, Person]] = silo.apply { persons =>
+        var personsTree: TreeMap[Int, Person] = TreeMap.empty[Int, Person]
         for (person <- persons) {
           personsTree = personsTree + (person.id -> person)
         }
         personsTree
       }
 
-    // create a group for each silo
-    val groups: List[List[SiloRef[Person, List[Person]]]] = for ((treeSilo, host) <- treeSilos.zip(hosts)) yield {
-      localGroups(host, treeSilo)
+      val resSilo = doSearch(treeSilo, numSearches)
+
+      groups
+      resSilo.send()
     }
+  */
+    val res = Await.result(done, 300.seconds)
+    println(s"res:\n${res.mkString("\n====\n")}")
 
-    val silos12 = for (i <- 0 until 4) yield
-      system.emptySilo[Person, List[Person]](hosts(i % 2))
 
-    groups(0).zip(groups(1)).zipWithIndex.map {
-      case ((leftSilo, rightSilo), i) =>
-        leftSilo.pumpTo(silos12(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
-        rightSilo.pumpTo(silos12(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
-    }
-
-    val silos34 = for (i <- 0 until 4) yield
-      system.emptySilo[Person, List[Person]](hosts((i % 2) + 2))
-
-    groups(2).zip(groups(3)).zipWithIndex.map {
-      case ((leftSilo, rightSilo), i) =>
-        leftSilo.pumpTo(silos34(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
-        rightSilo.pumpTo(silos34(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
-    }
-
-    // final merge
-    val finalSilos = for (i <- 0 until 4) yield
-      system.emptySilo[Person, List[Person]](hosts(i))
-
-    silos12.zip(silos34).zipWithIndex.map {
-      case ((leftSilo, rightSilo), i) =>
-        leftSilo.pumpTo(finalSilos(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
-        rightSilo.pumpTo(finalSilos(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
-    }
-
-    // check results
-    val groupFuts = for (i <- 0 until 4) yield
-      finalSilos(i).apply[Person, List[Person]](persons => persons.take(10)).send()
-    Future.sequence(groupFuts)
+    // shutdown Silo system
+    system.waitUntilAllClosed()
   }
-
-  // use apply to put it into a Silo with a search tree
-  // closure passed to apply uses a "specialized" way of building the tree
-/*
-  val groups1 = fut1.flatMap { silo =>
-    val treeSilo: SiloRef[(Int, Person), TreeMap[Int, Person]] = silo.apply { persons =>
-      var personsTree: TreeMap[Int, Person] = TreeMap.empty[Int, Person]
-      for (person <- persons) {
-        personsTree = personsTree + (person.id -> person)
-      }
-      personsTree
-    }
-
-    val resSilo = doSearch(treeSilo, numSearches)
-
-    groups
-    resSilo.send()
-  }
-*/
-  val res = Await.result(done, 20.seconds)
-  println(s"res:\n${res.mkString("\n====\n")}")
-
-
-  // shutdown Silo system
-  system.waitUntilAllClosed()
 }
