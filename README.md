@@ -4,7 +4,7 @@ The `F-P` library uses [sbt](http://www.scala-sbt.org/) for building and
 testing. Distributed tests and examples are supported using the
 [sbt-multi-jvm](https://github.com/sbt/sbt-multi-jvm) sbt plug-in.
 
-Homepage: [lampwww.epfl.ch/~hmiller/f-p](lampwww.epfl.ch/~hmiller/f-p)
+Homepage: [http://lampwww.epfl.ch/~hmiller/f-p](http://lampwww.epfl.ch/~hmiller/f-p)
 
 ## How to Run Examples and Tests
 
