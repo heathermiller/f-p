@@ -12,9 +12,12 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.Traversable
 
 /** A program operating on data stored in a silo can only do so using a
- *  reference to the silo, a so-called `SiloRef`. Similar to a proxy object, a
- *  `SiloRef` represents, and allows interacting with, a silo possibly located
- *  on a remote node.
+ *  reference to the silo, a so-called `SiloRef`.
+ *  
+ *  Similar to a proxy object, a `SiloRef` represents, and allows interacting
+ *  with, a silo possibly located on a remote node. For the component acquiring
+ *  a `SiloRef`, the location of the silo – local or remote – is completely
+ *  transparent. We call this property *location transparency*.
  *
  *  @tparam W
  *  @tparam T
