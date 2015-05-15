@@ -11,8 +11,22 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.collection.Traversable
 
-
+/** A program operating on data stored in a silo can only do so using a
+ *  reference to the silo, a so-called `SiloRef`. Similar to a proxy object, a
+ *  `SiloRef` represents, and allows interacting with, a silo possibly located
+ *  on a remote node.
+ *
+ *  @tparam W
+ *  @tparam T
+ */
 trait SiloRef[W, T <: Traversable[W]] {
+
+  /** Takes a spore, a kind of closure, that is to be applied to the data in
+   *  the silo of the receiver SiloRe.
+   *
+   *  Rather than immediately sending the spore across the network, and waiting
+   *  for the operation to finish, the apply method is lazy: it immediately
+   *  returns a SiloRef that refers to the result silo.*/ 
   def apply[V, S <: Traversable[V]](fun: Spore[T, S])
                                    (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S]
 
