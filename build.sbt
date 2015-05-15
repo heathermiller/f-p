@@ -6,7 +6,7 @@ lazy val root = (project in file(".")).
   settings(
     name := "f-p",
     version := "0.1.0-SNAPSHOT",
-    scalaVersion := "2.11.4",
+    scalaVersion := "2.11.6",
     resolvers += Resolver.sonatypeRepo("snapshots"),
     libraryDependencies ++= Seq(
       // "org.scala-lang.modules" %% "scala-pickling" % "0.10.0",
