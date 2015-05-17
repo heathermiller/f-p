@@ -46,7 +46,7 @@ object Demo {
       val localRange = range
       personsTree =>
         // test searching a few IDs
-        val idToSearch = range.toList
+        val idToSearch = localRange.toList
         idToSearch.foreach { id =>
           val contains = personsTree.contains(id)
           if (id < 10 && contains)
