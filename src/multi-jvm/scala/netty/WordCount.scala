@@ -18,27 +18,18 @@ import silt.netty.{SendUtils, SystemImpl, Server, TestSiloFactory, Person}
 
 
 object WordCountMultiJvmNode1 {
-  runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
-  runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
-
   def main(args: Array[String]): Unit =
-    new Server(8091, new SystemImpl).run()
+    Server(8091).run()
 }
 
 object WordCountMultiJvmNode2 {
-  runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
-  runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
-
   def main(args: Array[String]): Unit =
-    new Server(8092, new SystemImpl).run()
+    Server(8092).run()
 }
 
 object WordCountMultiJvmNode3 {
-  runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
-  runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
 
   def randomWord(random: Random): String = {
-    //TODO: read in list of words from big file
     val words = Array("is", "computer", "apple", "orange", "chair", "work", "fun", "program", "paper")
     val index = random.nextInt(words.length)
     words(index)

@@ -17,18 +17,12 @@ import silt.netty.{SendUtils, SystemImpl, Server, TestSiloFactory, Person}
 
 
 object BasicMultiJvmNode1 {
-  scala.pickling.runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
-  scala.pickling.runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
-
   def main(args: Array[String]): Unit = {
-    new Server(8090, new SystemImpl).run()
+    Server(8090).run()
   }
 }
 
 object BasicMultiJvmNode2 extends SendUtils {
-  scala.pickling.runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
-  scala.pickling.runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
-
   val systemImpl = new SystemImpl
 
   val numPersons = 10
