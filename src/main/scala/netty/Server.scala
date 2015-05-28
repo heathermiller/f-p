@@ -12,6 +12,9 @@ import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 
 class Server(port: Int, system: SystemImpl) {
 
+  scala.pickling.runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
+  scala.pickling.runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
+
   //FIXME: hostname
   private val host = Host("127.0.0.1", port)
 
@@ -65,17 +68,13 @@ object Server {
   val MID_CHUNK: Byte = 2
   val LAST_CHUNK: Byte = 3
 
-  scala.pickling.runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
-  scala.pickling.runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
-
   def main(args: Array[String]): Unit = {
     val port =
       if (args.length > 0) Integer.parseInt(args(0))
       else 8080
-
-    val system = new SystemImpl
-
-    new Server(port, system).run()
+    apply(port).run()
   }
 
+  def apply(port: Int): Server =
+    new Server(port, new SystemImpl)
 }
