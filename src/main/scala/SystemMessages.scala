@@ -39,3 +39,5 @@ case class CreatSilo(emitterId: Int, destRefId: Int, builder: AbstractBuilder)
 case class Emit(emitterId: Int, destRefId: Int, ba: Any/*Array[Byte]*/)
 
 case class Done(emitterId: Int, destRefId: Int)
+
+case class Terminate()
