@@ -1,12 +1,16 @@
 import com.typesafe.sbt.SbtMultiJvm
 import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 
+lazy val buildSettings = Seq(
+  version := "0.1.0-SNAPSHOT",
+  scalaVersion := "2.11.6"
+)
+
 lazy val `f-p` = (project in file(".")).
   settings(SbtMultiJvm.multiJvmSettings: _*).
+  settings(buildSettings: _*).
   settings(
     name := "f-p",
-    version := "0.1.0-SNAPSHOT",
-    scalaVersion := "2.11.6",
     resolvers += Resolver.sonatypeRepo("snapshots"),
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %% "spores-core" % "0.1.2",
@@ -22,3 +26,9 @@ lazy val `f-p` = (project in file(".")).
     // make sure that MultiJvm test are compiled by the default test compilation
     compile in MultiJvm <<= (compile in MultiJvm) triggeredBy (compile in Test)
   ) configs (MultiJvm)
+
+lazy val sample = Project(
+  id = "sample",
+  base = file("sample"),
+  settings = buildSettings
+) dependsOn(`f-p`)
