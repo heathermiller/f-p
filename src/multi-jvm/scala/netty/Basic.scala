@@ -12,13 +12,20 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Random
 
-import silt.{SiloRef, Host, LocalSilo, Emitter, SiloSystem}
-import silt.netty.{Server, TestSiloFactory, Person}
+import silt.{SiloRef, Host, LocalSilo, Emitter, SiloSystem, SiloFactory}
+import silt.netty.Server
 
 
 object BasicMultiJvmNode1 {
   def main(args: Array[String]): Unit =
     Server(8090).run()
+}
+
+
+case class Person(id: Int, age: Int, location: Int)
+
+class TestSiloFactory extends SiloFactory[Int, List[Int]] {
+  def data = new LocalSilo(List(40, 30, 20))
 }
 
 object BasicMultiJvmNode2 {
