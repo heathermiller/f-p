@@ -7,8 +7,7 @@ import scala.concurrent.duration._
 import scala.pickling.Defaults._
 import scala.pickling.shareNothing._
 
-import silt.{Host, LocalSilo}
-import silt.netty.SystemImpl
+import silt.{SiloSystem, Host, LocalSilo}
 
 object Client {
 
@@ -40,7 +39,7 @@ package!
   }
 
   def main(args: Array[String]): Unit = {
-    val system = new SystemImpl
+    val system = SiloSystem()
     val host = Host("127.0.0.1", 8090)
 
     val siloFut = system.fromFun(host)(() => populateSilo(10, new scala.util.Random(100)))

@@ -13,8 +13,8 @@ import scala.concurrent.duration._
 import scala.util.Random
 import scala.collection.mutable.ListBuffer
 
-import silt.{SiloRef, Host, LocalSilo, Emitter}
-import silt.netty.{SendUtils, SystemImpl, Server, TestSiloFactory, Person}
+import silt.{SiloSystem, SiloRef, Host, LocalSilo, Emitter}
+import silt.netty.Server
 
 
 object WordCountMultiJvmNode1 {
@@ -53,7 +53,7 @@ object WordCountMultiJvmNode3 {
   def main(args: Array[String]): Unit = {
     Thread.sleep(1000) // FIXME
 
-    val system = new SystemImpl
+    val system = SiloSystem()
     val host1 = Host("127.0.0.1", 8091)
     val host2 = Host("127.0.0.1", 8092)
 
