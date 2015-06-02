@@ -12,19 +12,16 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Random
 
-import silt.{SiloRef, Host, LocalSilo, Emitter}
-import silt.netty.{SendUtils, SystemImpl, Server, TestSiloFactory, Person}
+import silt.{SiloRef, Host, LocalSilo, Emitter, SiloSystem}
+import silt.netty.{Server, TestSiloFactory, Person}
 
 
 object BasicMultiJvmNode1 {
-  def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit =
     Server(8090).run()
-  }
 }
 
-object BasicMultiJvmNode2 extends SendUtils {
-  val systemImpl = new SystemImpl
-
+object BasicMultiJvmNode2 {
   val numPersons = 10
 
   def populateSilo(): LocalSilo[Person, List[Person]] = {
@@ -38,7 +35,7 @@ object BasicMultiJvmNode2 extends SendUtils {
   def main(args: Array[String]): Unit = {
     Thread.sleep(1000) // FIXME
 
-    val system = systemImpl
+    val system = SiloSystem()
     val host = Host("127.0.0.1", 8090)
     val siloFut: Future[SiloRef[Int, List[Int]]] = system.fromClass[Int, List[Int]](classOf[TestSiloFactory], host)
 
@@ -71,7 +68,7 @@ object BasicMultiJvmNode2 extends SendUtils {
     system.waitUntilAllClosed()
   }
 
-  def testPumpTo(system: SystemImpl, sourceFut: Future[SiloRef[Person, List[Person]]], host: Host): Unit = {
+  def testPumpTo(system: SiloSystem, sourceFut: Future[SiloRef[Person, List[Person]]], host: Host): Unit = {
     val fut = sourceFut.flatMap { source =>
       val target = system.emptySilo[Person, List[Person]](host)
       val s = spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) }
@@ -82,7 +79,7 @@ object BasicMultiJvmNode2 extends SendUtils {
     assert(res.size == 10)
   }
 
-  def testPumpTo2(system: SystemImpl, sourceFut: Future[SiloRef[Person, List[Person]]], sourceFut2: Future[SiloRef[Person, List[Person]]], host: Host): Unit = {
+  def testPumpTo2(system: SiloSystem, sourceFut: Future[SiloRef[Person, List[Person]]], sourceFut2: Future[SiloRef[Person, List[Person]]], host: Host): Unit = {
     val fut = sourceFut.zip(sourceFut2).flatMap { case (source1, source2) =>
       val target = system.emptySilo[Person, List[Person]](host)
       val s = spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) }

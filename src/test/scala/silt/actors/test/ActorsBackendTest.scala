@@ -23,7 +23,7 @@ object ActorsBackendTest {
 class ActorsBackendTest {
   import ActorsBackendTest._
 
-  // @Test
+  @Test
   def applyAndSend(): Unit = {
     val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)
@@ -43,7 +43,7 @@ class ActorsBackendTest {
     assert(res1.toString == "List([4], [3], [2])")
   }
 
-  // @Test
+  @Test
   def pumpTo(): Unit = {
     val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)

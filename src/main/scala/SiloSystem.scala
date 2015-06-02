@@ -9,8 +9,11 @@ import scala.collection.concurrent.TrieMap
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import silt.graph.EmptySiloRef
 
+object SiloSystem {
+  def apply(): SiloSystem =
+    new silt.netty.SystemImpl
+}
 
 trait SiloSystem {
   self: SiloSystemInternal =>
@@ -36,7 +39,7 @@ trait SiloSystem {
   def emptySilo[U, T <: Traversable[U]](host: Host): SiloRef[U, T] = {
     val refId = refIds.incrementAndGet()
     location += (refId -> host)
-    new EmptySiloRef[U, T](refId, host)(this)
+    new graph.EmptySiloRef[U, T](refId, host)(this)
   }
 
   def waitUntilAllClosed(): Unit
