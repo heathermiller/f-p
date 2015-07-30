@@ -21,7 +21,6 @@ object BasicMultiJvmNode1 {
     Server(8090).run()
 }
 
-
 case class Person(id: Int, age: Int, location: Int)
 
 class TestSiloFactory extends SiloFactory[Int, List[Int]] {

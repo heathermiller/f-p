@@ -11,29 +11,22 @@ import _root_.io.netty.buffer.ByteBuf
 import scala.concurrent.{Future, Promise}
 import scala.collection.mutable.ArrayBuffer
 
-import graph.Picklers._
-
 
 trait SendUtils {
-  import Server._
-
-  def systemImpl: SystemImpl
 
   val CHUNK_SIZE = 256
 
-  def pickleWriteFlush[T: Pickler](ch: Channel, msg: T): Unit = {
-    // PICKLING
-    // val arr = msg.pickle.value
+  def systemImpl: SystemImpl
 
-    // 1. pickle value
-    val tag = implicitly[Pickler[T]].tag
+  def pickleWriteFlush[T: Pickler](ch: Channel, msg: T): Unit = {
+    val pickler = implicitly[Pickler[T]]
+    val tag     = pickler.tag
     println(s"tag: ${tag.key}")
 
     if (msg.isInstanceOf[graph.Graph] || msg.isInstanceOf[InitSiloFun[_, _]]) {
-      import json._
+      import json.pickleFormat
       val builder = pickleFormat.createBuilder()
       builder.hintTag(tag)
-      val pickler = implicitly[Pickler[T]]
       println(s"pickler class: ${pickler.getClass.getName}")
       pickler.pickle(msg, builder)
       val p = builder.result()
@@ -44,10 +37,8 @@ trait SendUtils {
       println(up)
     }
 
-    import binary._
-    val builder = pickleFormat.createBuilder()
+    val builder = binary.pickleFormat.createBuilder()
     builder.hintTag(tag)
-    val pickler = implicitly[Pickler[T]]
     // println(s"pickler class: ${pickler.getClass.getName}")
     try {
       pickler.pickle(msg, builder)
@@ -56,7 +47,6 @@ trait SendUtils {
         t.printStackTrace()
         throw t
     }
-
     val p = builder.result()
     val arr = p.value
 

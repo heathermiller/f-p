@@ -65,6 +65,17 @@ class ApplySiloRef[V, S <: Traversable[V], U, T <: Traversable[U]]
   }
 }
 
+class FMappedSiloRef[V, S <: Traversable[V], U, T <: Traversable[U]]
+                    (val input: ProxySiloRef[V, S], val refId: Int, val f: Spore[S, SiloRef[U, T]],
+                     val pickler: Pickler[Spore[S, SiloRef[U, T]]], val unpickler: Unpickler[Spore[S, SiloRef[U, T]]])
+  (implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId, input.host) { // result on same host as input
+  def node(): Node = {
+    // recursively create graph node for `input`
+    val prevNode = input.node()
+    new FMapped[V, S, U, T](prevNode, refId, f, pickler, unpickler)
+  }
+}
+
 // created by SystemImpl.fromClass
 class MaterializedSiloRef[U, T <: Traversable[U]](val refId: Int, host: Host)(implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId, host) {
   def node(): Node = {

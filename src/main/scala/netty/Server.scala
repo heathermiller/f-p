@@ -10,13 +10,9 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 
 
-class Server(port: Int, system: SystemImpl) {
+class Server(hostname: String, port: Int, system: SystemImpl) {
 
-  scala.pickling.runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
-  scala.pickling.runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
-
-  //FIXME: hostname
-  private val host = Host("127.0.0.1", port)
+  private val host = Host(hostname, port)
 
   def run(): Unit = {
     println(s"SERVER [$host]: starting...")
@@ -76,5 +72,5 @@ object Server {
   }
 
   def apply(port: Int): Server =
-    new Server(port, new SystemImpl)
+    new Server("127.0.0.1", port, new SystemImpl)
 }

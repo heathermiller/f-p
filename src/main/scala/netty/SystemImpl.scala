@@ -30,8 +30,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 
-import graph._
-import Picklers._
+import graph.Picklers._
 
 
 // needs a way to talk to servers on other nodes
@@ -55,15 +54,16 @@ class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
   val latch = new CountDownLatch(1)
 
   def register[T: ClassTag: Pickler: Unpickler](): Unit = {
-   val clazz = classTag[T].runtimeClass
-   val p = implicitly[Pickler[T]]
-   val up = implicitly[Unpickler[T]]
-   // println(s"registering for ${clazz.getName()} pickler of class type ${p.getClass.getName}...")
-   GlobalRegistry.picklerMap += (clazz.getName() -> (x => p))
-   GlobalRegistry.unpicklerMap += (clazz.getName() -> up)
+    val clazz = classTag[T].runtimeClass
+    val p = implicitly[Pickler[T]]
+    val up = implicitly[Unpickler[T]]
+    // println(s"registering for ${clazz.getName()} pickler of class type ${p.getClass.getName}...")
+    GlobalRegistry.picklerMap += (clazz.getName() -> (x => p))
+    GlobalRegistry.unpicklerMap += (clazz.getName() -> up)
   }
 
   register[graph.Graph]
+  register[graph.CommandEnvelope]
 
   def start(): Future[Boolean] = Future.successful(true)
 
@@ -150,7 +150,7 @@ class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
     send(host, msg).map { x =>
       println("SystemImpl: got response for InitSilo msg")
       // create a typed wrapper
-      new MaterializedSiloRef[U, T](refId, host)(this)
+      new graph.MaterializedSiloRef[U, T](refId, host)(this)
     }
   }
 
