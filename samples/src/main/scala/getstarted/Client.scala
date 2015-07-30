@@ -1,4 +1,5 @@
-package sample
+package samples
+package getstarted 
 
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -45,7 +46,7 @@ package!
     val siloFut = system.fromFun(host)(() => populateSilo(10, new scala.util.Random(100)))
     val done = siloFut.flatMap(_.send())
 
-    val res = Await.result(done, 5.seconds)
+    val res = Await.result(done, 15.seconds)
     println("RESULT:")
     println(s"size of list: ${res.size}")
     res.foreach(println)

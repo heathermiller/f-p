@@ -27,8 +27,8 @@ lazy val `f-p` = (project in file(".")).
     compile in MultiJvm <<= (compile in MultiJvm) triggeredBy (compile in Test)
   ) configs (MultiJvm)
 
-lazy val sample = Project(
-  id = "sample",
-  base = file("sample"),
+lazy val samples = Project(
+  id = "samples",
+  base = file("samples"),
   settings = buildSettings
 ) dependsOn(`f-p`)

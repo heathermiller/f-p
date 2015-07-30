@@ -1,5 +1,5 @@
-package silt
-package demo
+package samples
+package datastructure
 
 import scala.spores._
 import SporePickler._
@@ -7,8 +7,6 @@ import SporePickler._
 import scala.pickling._
 import Defaults._
 import binary._
-
-import silt.actors._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future}
@@ -19,6 +17,8 @@ import scala.math.Ordering
 
 import scala.collection.immutable.TreeMap
 
+import silt.{SiloRef, LocalSilo, Host, Emitter}
+import silt.actors._
 
 case class Person(id: Int, age: Int, location: Int)
 
