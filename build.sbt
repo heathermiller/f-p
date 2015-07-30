@@ -3,7 +3,7 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 
 lazy val buildSettings = Seq(
   version := "0.1.0-SNAPSHOT",
-  scalaVersion := "2.11.6"
+  scalaVersion := "2.11.7"
 )
 
 lazy val `f-p` = (project in file(".")).
@@ -15,10 +15,10 @@ lazy val `f-p` = (project in file(".")).
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %% "spores-core" % "0.1.3",
       "org.scala-lang.modules" %% "spores-pickling" % "0.1.3",
-      "io.netty" % "netty-all" % "4.0.4.Final",
-      "com.typesafe.akka" % "akka-actor_2.11" % "2.3.6",
-      "junit" % "junit-dep" % "4.10" % "test",
-      "com.novocode" % "junit-interface" % "0.10" % "test"
+      "io.netty" % "netty-all" % "4.0.30.Final",
+      "com.typesafe.akka" % "akka-actor_2.11" % "2.3.12",
+      "junit" % "junit-dep" % "4.11" % "test",
+      "com.novocode" % "junit-interface" % "0.11" % "test"
     ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s"),
     parallelExecution in Global := false,

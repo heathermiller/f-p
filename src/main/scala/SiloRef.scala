@@ -20,16 +20,18 @@ import scala.collection.Traversable
  *  transparent. We call this property *location transparency*.
  *
  *  @tparam W
- *  @tparam T
+ *  @tparam T the type corresponding to the referenced silo's data
  */
 trait SiloRef[W, T <: Traversable[W]] {
 
-  /** Takes a spore, a kind of closure, that is to be applied to the data in
-   *  the silo of the receiver SiloRe.
+  /** Takes a spore that is to be applied to the data in the referenced silo.
    *
    *  Rather than immediately sending the spore across the network, and waiting
    *  for the operation to finish, the apply method is lazy: it immediately
-   *  returns a SiloRef that refers to the result silo.*/ 
+   *  returns a SiloRef that refers to the result silo.
+   *  
+   *  @param fun the spore to be applied on the data pointed to by this `SiloRef`
+   */ 
   def apply[V, S <: Traversable[V]](fun: Spore[T, S])
                                    (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S]
 
