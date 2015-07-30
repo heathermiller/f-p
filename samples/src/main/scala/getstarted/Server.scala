@@ -1,4 +1,5 @@
-package sample
+package samples
+package getstarted 
 
 import silt.netty.{Server => NettyServer}
 
