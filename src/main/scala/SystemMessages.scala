@@ -1,5 +1,7 @@
 package silt
 
+import scala.spores.NullarySpore
+
 
 ////////////////////////////////
 // commands to server
@@ -12,7 +14,7 @@ abstract class ReplyMessage {
 // that way we can cast the data to T before operating on it.
 case class InitSilo(fqcn: String, refId: Int) extends ReplyMessage
 
-case class InitSiloFun[U, T <: Traversable[U]](fun: () => LocalSilo[U, T], refId: Int) extends ReplyMessage
+case class InitSiloFun[U, T <: Traversable[U]](fun: NullarySpore[LocalSilo[U, T]], refId: Int) extends ReplyMessage
 
 case class OKCreated(refId: Int) extends ReplyMessage
 

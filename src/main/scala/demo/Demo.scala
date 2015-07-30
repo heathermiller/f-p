@@ -104,7 +104,12 @@ object Demo {
 
 
     // put into Silos
-    val origSiloFuts = hosts.map { host => system.fromFun(host)(() => populateSilo(numPersons)) }
+    val origSiloFuts = hosts.map { host => system.fromFun(host)(spore {
+      val localNumPersons = numPersons
+      delayed {
+        populateSilo(localNumPersons)
+      }
+    }) }
     val futOrigSilos = Future.sequence(origSiloFuts)
 
     val done = futOrigSilos.flatMap { origSilos =>

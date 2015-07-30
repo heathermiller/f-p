@@ -57,8 +57,8 @@ object WordCountMultiJvmNode3 {
     val host1 = Host("127.0.0.1", 8091)
     val host2 = Host("127.0.0.1", 8092)
 
-    val silo1Fut = system.fromFun(host1)(() => populateSilo(10, new Random(100)))
-    val silo2Fut = system.fromFun(host2)(() => populateSilo(10, new Random(200)))
+    val silo1Fut = system.fromFun(host1)(spore { delayed { populateSilo(10, new Random(100)) } })
+    val silo2Fut = system.fromFun(host2)(spore { delayed { populateSilo(10, new Random(200)) } })
 
     val reducedPairs: SiloRef[String, List[String]] => SiloRef[(String, Int), List[(String, Int)]] =
       { (silo: SiloRef[String, List[String]]) =>

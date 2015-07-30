@@ -62,12 +62,12 @@ object BasicMultiJvmNode2 {
     assert(res3.toString == "List(41, 31, 21)")
 
     // test handling of InitSiloFun
-    val sourceFut = system.fromFun(host)(populateSilo)
+    val sourceFut = system.fromFun[Person, List[Person]](host)(spore { delayed { populateSilo() } })
     Await.ready(sourceFut, 5.seconds)
 
     testPumpTo(system, sourceFut, host)
 
-    val sourceFut2 = system.fromFun(host)(populateSilo)
+    val sourceFut2 = system.fromFun[Person, List[Person]](host)(spore { delayed { populateSilo() } })
     for (_ <- 1 to 10) {
       testPumpTo2(system, sourceFut, sourceFut2, host)
     }
