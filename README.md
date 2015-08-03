@@ -14,7 +14,7 @@ Examples and tests can be launched from the sbt prompt:
 
 ```
 > project samples
-> [info] Set current project to f-p samples (in build file:/Users/nrm/Sources/nrm/bd/f-p/)
+> [info] Set current project to f-p samples (in build file:/.../f-p/)
 > run
 > [warn] Multiple main classes detected.  Run 'show discoveredMainClasses' to see the list
 >
