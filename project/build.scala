@@ -37,6 +37,8 @@ object build extends Build {
         "org.scala-lang.modules" %% "spores-pickling" % "0.1.3",
         "io.netty" % "netty-all" % "4.0.30.Final",
         "com.typesafe.akka" % "akka-actor_2.11" % "2.3.12",
+        "com.typesafe.scala-logging" %% "scala-logging"   % "3.1.0",
+        "ch.qos.logback"              % "logback-classic" % "1.1.3",
         "junit"        % "junit-dep"       % "4.11" % "test",
         "com.novocode" % "junit-interface" % "0.11" % "test"
       ),
