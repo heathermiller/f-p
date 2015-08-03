@@ -154,39 +154,3 @@ abstract class ClientHandler extends ChannelInboundHandlerAdapter with SendUtils
     ctx.close()
   }
 }
-
-
-trait HasNames {
-  var name: String = _
-  var newName: String = _
-}
-
-// this is what we ultimately want to use
-case class TransformerMessage[A, B, C[_] <: Traversable[_]](combinator: Transformer[A, B, C], spore: A => B)
-  extends AbstractMessage[C[A], A, B, C[B]]
-
-case class CombinerMessage[A, B, C[_] <: Traversable[_]](combinator: Combiner[A, B, C], spore: A => B)
-  // extends AbstractMessage[C[A], A, B, B]
-
-case class AccessorMessage[A, B, C[_] <: Traversable[_]](combinator: Accessor[A, B, C], spore: A => B)
-  extends AbstractMessage[C[A], A, B, B]
-
-/*
-  type Transformer[A, B, C[_] <: Traversable[_]] = (C[A], A => B) => C[B] // stateless
-
-  type Combiner[A, B, C[_] <: Traversable[_]] = (C[A], B, (B, A) => B) => B // stateless
-
-  type Accessor[A, B, C[_] <: Traversable[_]] = (C[A], A => B) => B // stateless
-*/
-
-// show as second step: generalizing `Message`
-// in the most general case: no relationship between types `A` and `B`
-abstract class AbstractMessage[A, B, C, D] extends HasNames {
-
-  // data of type `A`
-  // user spore of type `Spore[B, C]`
-  def combinator: (A, B => C) => D
-
-  def spore: B => C
-
-}

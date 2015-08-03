@@ -1,28 +1,32 @@
 package silt
 package netty
 
+import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
+
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.channel.{EventLoopGroup, ChannelInitializer, ChannelOption}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 
-import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
+import org.slf4j.LoggerFactory
+import com.typesafe.scalalogging.{ Logger, StrictLogging => Logging } 
 
-
-class Server(hostname: String, port: Int, system: SystemImpl) {
+class Server(hostname: String, port: Int, system: SystemImpl) extends AnyRef with Logging {
 
   private val host = Host(hostname, port)
 
+  /** Initialize and start a Netty-based server as described at [[http://netty.io/wiki/user-guide-for-4.x.html]] */
   def run(): Unit = {
-    println(s"SERVER [$host]: starting...")
+    logger.info(s"SERVER [$host]: starting...")
 
     val bossGroup: EventLoopGroup = new NioEventLoopGroup
     val workerGroup: EventLoopGroup = new NioEventLoopGroup
 
-    // Queue for transferring messages from the netty event loop to the server's event loop
+    // transfers messages from Netty's event loop to the server's event loop
     val queue: BlockingQueue[HandleIncoming] = new LinkedBlockingQueue[HandleIncoming]()
-    // Thread that blocks on the queue
+
+    // thread that blocks on the queue
     val receptorRunnable = new ReceptorRunnable(queue, system, host)
     val receptorThread = new Thread(receptorRunnable)
     receptorThread.start()
@@ -39,17 +43,17 @@ class Server(hostname: String, port: Int, system: SystemImpl) {
        .option(ChannelOption.SO_BACKLOG.asInstanceOf[ChannelOption[Any]], 128)
        .childOption(ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], true)
 
-      // Bind port and start accepting incoming connections
+      // bind port and start accepting incoming connections
       b.bind(port).sync()
 
       system.latch.await()
-      print(s"SERVER [$host]: shutting down...")
+      logger.info(s"SERVER [$host]: shutting down...")
 
       receptorRunnable.shouldTerminate = true
       receptorThread.interrupt()
       receptorThread.join()
 
-      println("DONE")
+      logger.info("DONE")
     } finally {
       workerGroup.shutdownGracefully()
       bossGroup.shutdownGracefully()
