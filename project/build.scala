@@ -1,6 +1,8 @@
 import sbt._
 import Keys._
 
+import com.typesafe.sbteclipse.plugin.EclipsePlugin.EclipseKeys
+
 import com.typesafe.sbt.SbtMultiJvm
 import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 
@@ -17,7 +19,11 @@ object build extends Build {
     ), 
     resolvers ++= (if (version.value.endsWith("-SNAPSHOT")) List(Resolver.sonatypeRepo("snapshots")) else Nil),
     parallelExecution in Global := false,
-    testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s")
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s"),
+    unmanagedSourceDirectories in Compile <<= (scalaSource in Compile)(Seq(_)),
+    unmanagedSourceDirectories in Test <<= (scalaSource in Test)(Seq(_)),
+    EclipseKeys.eclipseOutput := Some(".target"),
+    EclipseKeys.withSource := true
   )  
 
   lazy val `f-p` = Project(
