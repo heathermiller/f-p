@@ -6,6 +6,8 @@ import scala.pickling._
 import Defaults._
 import binary._
 
+import SporePickler._
+
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -18,7 +20,7 @@ final case class PumpToInput[T <: Traversable[U], U, V, R <: Traversable[_], P <
 abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(implicit system: SiloSystemInternal) extends SiloRef[W, T] {
 
   def apply[V, S <: Traversable[V]](g: Spore[T, S])
-                                   (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S] = {
+                                    (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S] = {
     val newRefId = system.refIds.incrementAndGet()
     val host = system.location(refId)
     println(s"apply: register location of $newRefId: $host")
@@ -40,6 +42,15 @@ abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(
     val host = system.location(refId)
     println(s" $host")
     system.send(host, Graph(n)).map(_.asInstanceOf[T])
+  }
+
+  override def flatMap[V, S <: Traversable[V]](fun: Spore[T, SiloRef[V, S]])
+    (implicit pickler: Pickler[Spore[T, SiloRef[V, S]]],
+      unpickler: Unpickler[Spore[T, SiloRef[V, S]]]): SiloRef[V, S] = {
+    val newRefId = system.refIds.incrementAndGet()
+    val host = system.location(refId)
+    system.location += (newRefId -> host)
+    new FMappedSiloRef(this, newRefId, fun, pickler, unpickler)
   }
 
   def id = SiloRefId(refId)
@@ -72,6 +83,7 @@ class FMappedSiloRef[V, S <: Traversable[V], U, T <: Traversable[U]]
   def node(): Node = {
     // recursively create graph node for `input`
     val prevNode = input.node()
+
     new FMapped[V, S, U, T](prevNode, refId, f, pickler, unpickler)
   }
 }

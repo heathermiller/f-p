@@ -1,7 +1,8 @@
 package silt
 
-import scala.spores.{Spore, Spore2}
-import scala.pickling.{Pickler, Unpickler}
+import scala.spores._
+import scala.pickling._
+import scala.pickling.Defaults._
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
