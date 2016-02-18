@@ -22,6 +22,8 @@ case class ForceMessage(refId: Int) extends ReplyMessage
 
 case class ForceResponse(value: Any) extends ReplyMessage
 
+case class ForceError(err: Throwable) extends ReplyMessage
+
 /**
  *  @tparam A old element type
  *  @tparam B new element type
