@@ -3,6 +3,8 @@ package silt
 import scala.pickling._
 import Defaults._
 
+import scala.spores._
+
 import scala.concurrent.Future
 import scala.collection.mutable
 import scala.collection.concurrent.TrieMap
@@ -24,7 +26,7 @@ trait SiloSystem {
       InitSilo(clazz.getName(), refId)
     })
 
-  def fromFun[U, T <: Traversable[U]](host: Host)(fun: () => LocalSilo[U, T])(implicit p: Pickler[InitSiloFun[U, T]]): Future[SiloRef[U, T]] =
+  def fromFun[U, T <: Traversable[U]](host: Host)(fun: Spore[Unit, LocalSilo [U, T]])(implicit p: Pickler[InitSiloFun[U, T]]): Future[SiloRef[U, T]] =
     initRequest[U, T, InitSiloFun[U, T]](host, { (refId: Int) =>
       println(s"fromFun: register location of $refId")
       InitSiloFun(fun, refId)
