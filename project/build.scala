@@ -56,11 +56,11 @@ object build extends Build {
     )
   ) dependsOn(`core`)
 
-  lazy val trials = Project(
-    id = "trials",
-    base = file("trials"),
+  lazy val baby_spark = Project(
+    id = "baby_spark",
+    base = file("baby_spark"),
     settings = standardSettings ++ SbtMultiJvm.multiJvmSettings ++ Seq[Sett](
-      name := "trials",
+      name := "baby_spark",
       cancelable in Global := true,
       compile in MultiJvm <<= (compile in MultiJvm) triggeredBy (compile in Test)
     )
