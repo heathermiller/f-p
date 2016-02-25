@@ -55,15 +55,31 @@ class RDD[T, Container[A] <: Traversable[A]] private (val silos: Seq[SiloRef[T, 
     })
   }
 
-  def filter(f: Spore[T, Boolean]): RDD[T, Container] = ???
+  def filter(f: Spore[T, Boolean])(implicit cbf: CanBuildTo[T, Container]): RDD[T, Container] = {
+    flatMap(spore {
+      val filterF = f
+      c => if (filterF(c)) List(c) else Nil
+    })
+    // flatMap(spore {
+    //   val filterF = f
+    //   val lCbf = cbf
+    //   c => {
+    //     val builder = lCbf()
+    //     if (filterF(c)) {
+    //       builder += c
+    //     }
+    //     builder.result()
+    //   }
+    // })
+  }
 
-  def flatMap[B](f: Spore[T, Container[B]])(implicit cbf: CanBuildTo[B, Container]): RDD[B, Container] = {
+  def flatMap[B, C[X] <: Traversable[X]](f: Spore[T, C[B]])(implicit cbt1: CanBuildTo[B, Container]): RDD[B, Container] = {
     val resList = silos.map {
       s => s.apply[B, Container[B]](spore {
         val func = f
-        implicit val lCbf = cbf
+        implicit val lcbt1 = cbt1
         content => {
-          content.flatMap[B, Container[B]](func)(collection.breakOut(lCbf))
+          content.flatMap[B, Container[B]](func)(collection.breakOut(lcbt1))
         }
       })
     }
@@ -90,6 +106,13 @@ class RDD[T, Container[A] <: Traversable[A]] private (val silos: Seq[SiloRef[T, 
     }), Duration.Inf).flatten
   }
 
+  def count()(implicit ec: ExecutionContext, cbt: CanBuildTo[Long, Container]): Long = {
+    map(spore {
+      l => 1L
+    }).reduce(spore {
+      (a, b) => a + b
+    })
+  }
 }
 
 object RDDExample {
@@ -108,14 +131,18 @@ object RDDExample {
 
     val content = Await.result(RDD.fromTextFile("data/data.txt"), Duration.Inf)
 
-    val words = content.flatMap(line => line.split(' ').toList)
-    println(words.collect())
+    // val words = content.flatMap(line => line.split(' ').toList)
+    // println(words.collect())
 
     val lineLength = content.map(line => line.length)
+    val bigLines = lineLength.filter(l => l > 30).count()
+    println(s"There is ${bigLines} lines bigger than 30 characters")
+
     val res = lineLength.reduce(spore {
       (a, b) => a + b
     })
     println(res)
+
 
     system.waitUntilAllClosed()
   }
