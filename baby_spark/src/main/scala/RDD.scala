@@ -17,6 +17,9 @@ import SporePickler._
 
 import scala.io.Source
 
+import scalaz._
+import Scalaz._
+
 import silt._
 
 object RDD {
@@ -39,16 +42,12 @@ object RDD {
   }
 
   implicit def RDD2MapRDD[K, V, S <: Traversable[(K, V)]](rdd: RDD[(K, V), S]): MapRDD[K, V, S] = {
-    return new MapRDD[K, V, S](rdd.silos)
+    new MapRDD[K, V, S](rdd.silos)
   }
 
-  implicit def MapRDD2RDD[K, V, S <: Traversable[(K, V)]](rdd: MapRDD[K, V, S]): RDD[(K, V), S] = {
-    return new RDD[(K, V), S](rdd.silos)
-  }
+  implicit def MapRDD2Semigroup[K, V : Semigroup, S <: Traversable[(K, V)]: Semigroup](rdd: MapRDD[K, V, S]): MapSemigroupRDD[K, V, S] =
+    new MapSemigroupRDD(rdd.silos)
 
-  // implicit def TupleRDD2PairRDD[K, V, S <: Traversable[(K, V)]](rdds: Tuple2[MapRDD[K, V, S], MapRDD[K, V, S]]): PairRDD[K, V, S] = {
-  //   return new PairRDD[K, V, S](rdds._1.silos, rdds._2.silos)
-  // }
 }
 
 class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
@@ -87,6 +86,8 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
     }
     RDD(resList)
   }
+
+  def groupBy[K, IS <: Traversable[T], RS <: Traversable[(K, IS)]](f: Spore[T, K]): MapRDD[K, IS, RS] = ???
 
   def flatMap[B, V <: Traversable[B]](f: Spore[T, Seq[B]])(implicit cbt1: CanBuildTo[B, V]): RDD[B, V] = {
     val resList = silos.map {
@@ -135,11 +136,27 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 
 // S == Type storing the (K, V) pairs
 class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K, V), S]]) extends RDD[(K, V), S](silos) {
-  def reduceByKey[RS <: Traversable[(K, V)]](f: Spore2[V, V, V]): MapRDD[K, V, RS] = ???
-
-  def groupByKey[RS <: Traversable[(K, Seq[V])]]()(implicit cbf1: CanBuildTo[(K, Seq[V]), RS], cbf2: CanBuildTo[V, Seq[V]]): MapRDD[K, Seq[V], RS] = {
+  def reduceByKey[RS <: Traversable[(K, V)]](f: Spore2[V, V, V])(implicit cbf1: CanBuildTo[(K, V), RS]): MapRDD[K, V, RS] = {
     val resList = silos.map {
-      s => s.apply[(K, Seq[V]), RS](spore {
+      s => s.apply[(K, V), RS](spore {
+        val func = f
+        val lcbf = cbf1
+        c => {
+          val res0 = c.groupBy(_._1)
+          val res1 = res0.map(e => (e._1, e._2.map(_._2)))
+          val res2 = res1.map(e => (e._1, e._2.reduce(func)))(collection.breakOut(lcbf))
+          res2
+        }
+      })
+    }
+    new MapRDD(resList)
+  }
+
+  // IS: Traversable type used to store the value for one key
+  // RS: Traversable type used to store the mapping key/value
+  def groupByKey[IS <: Traversable[V], RS <: Traversable[(K, IS)]]()(implicit cbf1: CanBuildTo[(K, IS), RS], cbf2: CanBuildTo[V, IS]): MapRDD[K, IS, RS] = {
+    val resList = silos.map {
+      s => s.apply[(K, IS), RS](spore {
         val lcbf = cbf1
         val lcbf2 = cbf2
         c => {
@@ -149,10 +166,15 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K,
         }
       })
     }
-    new MapRDD[K, Seq[V], RS](resList)
+    new MapRDD[K, IS, RS](resList)
   }
 
-  // TJoin: Traversable to use to store the Tuple(V, V2)
+  def join[IS <: Traversable[V], RS <: Traversable[(K, IS)]](other: MapRDD[K, V, S])(implicit cbf1: CanBuildTo[(K, IS), RS], cbf2: CanBuildTo[V, IS]): MapRDD[K, IS, RS] = {
+    val rdd1 = groupByKey[IS, RS]()
+    val rdd2 = other.groupByKey[IS, RS]()
+    new MapRDD(rdd1.silos ++ rdd2.silos)
+  }
+
   def join[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, W))]](other: MapRDD[K, W, S2])(implicit ec: ExecutionContext, cbf1: CanBuildTo[(K, (V, W)), FS], cbf2: CanBuildTo[(K, W), S2]): MapRDD[K, Tuple2[V, W], FS] = {
     flatMap[(K, Tuple2[V, W]), FS](spore {
       val rdd = other
@@ -176,12 +198,39 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K,
   }
 }
 
+class MapSemigroupRDD[K, V : Semigroup, S <: Traversable[(K, V)] : Semigroup](override val silos: Seq[SiloRef[(K, V), S]]) extends MapRDD[K, V, S](silos) {
+
+  def collectMap()(implicit ec: ExecutionContext): S = {
+    Await.result(Future.sequence(silos.map {
+      s => s.send()
+    }), Duration.Inf).reduce((a, b) => a |+| b)
+  }
+}
+
 object RDDExample {
 
   import silt.actors._
   import scala.concurrent._
   import scala.concurrent.duration._
   import scala.concurrent.ExecutionContext.Implicits.global
+
+  implicit def TreeMapSemigroup[K, V : Semigroup](implicit ordering: scala.Ordering[K]): Semigroup[TreeMap[K, V]] = new Semigroup[TreeMap[K, V]] with std.MapInstances with std.MapFunctions {
+    def zero = new TreeMap[K, V]()(ordering)
+    // Repetition of scalaz.std.Map: method apppend defined in mapMonoid
+    override def append(m1: TreeMap[K, V], m2: => TreeMap[K, V]): TreeMap[K, V] = {
+      val m2Instance = m2
+
+      val (from, to, semigroup) = {
+        if (m1.size > m2Instance.size) (m2Instance, m1, Semigroup[V].append(_:V, _:V))
+        else (m1, m2Instance, (Semigroup[V].append(_: V, _: V)).flip)
+      }
+
+      from.foldLeft(to) {
+        case (to, (k, v)) => to.updated(k, to.get(k).map(semigroup(_, v)).getOrElse(v))
+      }
+    }
+  }
+
 
   def main(args: Array[String]): Unit = {
     implicit val system = new SystemImpl
@@ -201,9 +250,7 @@ object RDDExample {
       line.split(' ').toList
     }).map(word => (word.length, word))
 
-    val res = contentWord.groupByKey[TreeMap[Int, Seq[String]]]().collect()
-
-    // val res = contentWord.join(loremWord).groupByKey[TreeMap[Int, Seq[(String, String)]]]().collect()
+    val res = contentWord.join[Set[String], TreeMap[Int, Set[String]]](loremWord).collectMap()
 
     println(s"Result... ${res}")
 
