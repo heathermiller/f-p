@@ -19,7 +19,7 @@ final case class PumpToInput[T <: Traversable[U], U, V, R <: Traversable[_], P <
 // IDEA: create ref ids immediately, as well as emitter ids
 abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(implicit system: SiloSystemInternal) extends SiloRef[W, T] {
 
-  def apply[V, S <: Traversable[V]](g: Spore[T, S])
+  override def apply[V, S <: Traversable[V]](g: Spore[T, S])
                                     (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S] = {
     val newRefId = system.refIds.incrementAndGet()
     val host = system.location(refId)
