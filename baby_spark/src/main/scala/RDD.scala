@@ -1,7 +1,9 @@
 package baby_spark
+package rdd
 
-import scala.language.higherKinds
+import scala.language.{higherKinds, implicitConversions}
 
+import scala.collection.immutable.TreeMap
 import scala.collection.generic._
 
 import scala.spores._
@@ -18,15 +20,15 @@ import scala.io.Source
 import silt._
 
 object RDD {
-  def apply[T, Container[A] <: Traversable[A]](silos: SiloRef[T, Container[T]]): RDD[T, Container] =
+  def apply[T, S <: Traversable[T]](silos: SiloRef[T, S]): RDD[T, S] =
     new RDD(List(silos))
 
 
-  def apply[T, Container[A] <: Traversable[A]](silos: Seq[SiloRef[T, Container[T]]]): RDD[T, Container] =
+  def apply[T, S <: Traversable[T]](silos: Seq[SiloRef[T, S]]): RDD[T, S] =
     new RDD(silos)
 
   // Future isn't needed if instead the creation of a Silo returns a SiloRef directly
-  def fromTextFile(filename: String)(implicit system: SiloSystem, host: Host, ec: ExecutionContext): Future[RDD[String, List]] = {
+  def fromTextFile(filename: String)(implicit system: SiloSystem, host: Host, ec: ExecutionContext): Future[RDD[String, List[String]]] = {
     system.fromFun(host)(spore {
       val fl = filename
       _: Unit => {
@@ -35,51 +37,64 @@ object RDD {
       }
     }).map { RDD(_) }
   }
+
+  implicit def RDD2MapRDD[K, V, S[A, B] <: Traversable[(A, B)]](rdd: RDD[(K, V), S[K, V]]): MapRDD[K, V, S] = {
+    return new MapRDD[K, V, S](rdd.silos)
+  }
+
+  implicit def MapRDD2RDD[K, V, S[A, B] <: Traversable[(A, B)]](rdd: MapRDD[K, V, S]): RDD[(K, V), S[K, V]] = {
+    return new RDD[(K, V), S[K, V]](rdd.silos)
+  }
+
+  // implicit def TupleRDD2PairRDD[K, V, S <: Traversable[(K, V)]](rdds: Tuple2[MapRDD[K, V, S], MapRDD[K, V, S]]): PairRDD[K, V, S] = {
+  //   return new PairRDD[K, V, S](rdds._1.silos, rdds._2.silos)
+  // }
 }
 
-class RDD[T, Container[A] <: Traversable[A]] private (val silos: Seq[SiloRef[T, Container[T]]]) {
+class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 
   // Trick from https://stackoverflow.com/questions/3225675/can-i-pimp-my-library-with-an-analogue-of-traversablelike-map-that-has-nicely
   // Note
-  type CanBuildTo[Elem, C[X]] = CanBuildFrom[Nothing, Elem, C[Elem]]
+  type CanBuildTo[Elem, C] = CanBuildFrom[Nothing, Elem, C]
 
-  def map[B](f: Spore[T, B])(implicit cbt: CanBuildTo[B, Container]): RDD[B, Container] = {
+  def map[B, V <: Traversable[B]](f: Spore[T, B])(implicit cbt: CanBuildTo[B, V]): RDD[B, V] = {
     RDD(silos.map {
-      s => s.apply[B, Container[B]](spore {
+      s => s.apply[B, V](spore {
         val localFunc = f
         implicit val lCbt = cbt
         content => {
-          content.map[B, Container[B]](localFunc)(collection.breakOut(lCbt))
+          content.map[B, V](localFunc)(collection.breakOut(lCbt))
         }
       })
     })
   }
 
-  def filter(f: Spore[T, Boolean])(implicit cbf: CanBuildTo[T, Container]): RDD[T, Container] = {
-    flatMap(spore {
-      val filterF = f
-      c => if (filterF(c)) List(c) else Nil
-    })
-    // flatMap(spore {
-    //   val filterF = f
-    //   val lCbf = cbf
-    //   c => {
-    //     val builder = lCbf()
-    //     if (filterF(c)) {
-    //       builder += c
-    //     }
-    //     builder.result()
-    //   }
-    // })
+  def filter(f: Spore[T, Boolean])(implicit cbf: CanBuildTo[T, S]): RDD[T, S] = {
+    val resList = silos.map {
+      s => s.apply[T, S](spore {
+        val lf = f
+        val lcbf = cbf
+        content => {
+          val builder = lcbf()
+          content.foreach { elem => {
+            if (lf(elem)) {
+              builder += elem
+            }
+          } }
+          builder.result()
+        }
+      })
+    }
+    RDD(resList)
   }
 
-  def flatMap[B, C[X] <: Traversable[X]](f: Spore[T, C[B]])(implicit cbt1: CanBuildTo[B, Container]): RDD[B, Container] = {
+  def flatMap[B, V <: Traversable[B]](f: Spore[T, Seq[B]])(implicit cbt1: CanBuildTo[B, V]): RDD[B, V] = {
     val resList = silos.map {
-      s => s.apply[B, Container[B]](spore {
+      s => s.apply[B, V](spore {
         val func = f
         implicit val lcbt1 = cbt1
         content => {
-          content.flatMap[B, Container[B]](func)(collection.breakOut(lcbt1))
+          content.flatMap[B, V](func)(collection.breakOut(lcbt1))
         }
       })
     }
@@ -95,7 +110,7 @@ class RDD[T, Container[A] <: Traversable[A]] private (val silos: Seq[SiloRef[T, 
         }
       }).send()
     }
-    val res: Future[Seq[List[T]]] = Future.sequence(resList)
+    val res = Future.sequence(resList)
     val res1 = Await.result(res, Duration.Inf).flatten
     res1.reduce(f)
   }
@@ -106,11 +121,44 @@ class RDD[T, Container[A] <: Traversable[A]] private (val silos: Seq[SiloRef[T, 
     }), Duration.Inf).flatten
   }
 
-  def count()(implicit ec: ExecutionContext, cbt: CanBuildTo[Long, Container]): Long = {
-    map(spore {
-      l => 1L
-    }).reduce(spore {
-      (a, b) => a + b
+  def count()(implicit ec: ExecutionContext): Long = {
+    val resList = silos.map {
+      s => s.apply[Long, List[Long]](spore {
+        content => content.size.longValue :: Nil
+      }).send()
+    }
+    val res = Future.sequence(resList)
+    val res1 = Await.result(res, Duration.Inf).flatten
+    res1.reduce(_ + _)
+  }
+}
+
+// S == Type storing the (K, V) pairs
+class MapRDD[K, V, S[A, B] <: Traversable[(A, B)]](override val silos: Seq[SiloRef[(K, V), S[K, V]]]) extends RDD[(K, V), S[K, V]](silos) {
+  def reduceByKey(f: Spore2[V, V, V]): MapRDD[K, V, S] = ???
+
+  def groupByKey(): MapRDD[K, V, S] = ???
+
+  // TJoin: Traversable to use to store the Tuple(V, V2)
+  def join[W](other: MapRDD[K, W, S])(implicit cbf1: CanBuildTo[(K, Tuple2[V, W]), S[K, Tuple2[V, W]]], cbf2: CanBuildTo[(K, W), S[K, W]], ec: ExecutionContext): MapRDD[K, Tuple2[V, W], S] = {
+    flatMap[(K, Tuple2[V, W]), S[K, Tuple2[V, W]]](spore {
+      val rdd = other
+      val lcbf1 = cbf1
+      val lcbf2 = cbf2
+      val lec = ec
+      c1 => {
+        val k1 = c1._1
+        val v1 = c1._2
+        val res0 = rdd.filter(spore {
+          val lk1 = k1
+          c2 => c2._1 == lk1
+        })(lcbf2)
+        val res1 = res0.map(spore {
+          val lv1 = v1
+          c2 => (c2._1, (lv1, c2._2))
+        })(lcbf1)
+        res1.collect()(lec)
+      }
     })
   }
 }
@@ -131,17 +179,30 @@ object RDDExample {
 
     val content = Await.result(RDD.fromTextFile("data/data.txt"), Duration.Inf)
 
-    // val words = content.flatMap(line => line.split(' ').toList)
-    // println(words.collect())
-
-    val lineLength = content.map(line => line.length)
-    val bigLines = lineLength.filter(l => l > 30).count()
-    println(s"There is ${bigLines} lines bigger than 30 characters")
-
-    val res = lineLength.reduce(spore {
-      (a, b) => a + b
+    val sl1 = content.map[(Int, List[String]), TreeMap[Int, List[String]]](line => {
+      val words = line.split(' ').toList
+      (words.length, words)
     })
-    println(res)
+    val sl2 = content.map[(Int, List[String]), TreeMap[Int, List[String]]](line => {
+      val words = line.split(' ').toList
+      (words.length, words)
+    })
+
+    val res = sl1.join(sl2).collect()
+
+    println(s"Result... ${res}")
+
+    // val lineLength = content.map(line => line.length)
+    // val twiceLength = lineLength.map(_ * 2).collect()
+    // val twiceLength2 = lineLength.map(_ * 2).collect()
+    // println(s"line length1: ${twiceLength} | line length 2: ${twiceLength2}")
+    // val bigLines = lineLength.filter(l => l > 30).count()
+    // println(s"There is ${bigLines} lines bigger than 30 characters")
+
+    // val sizeLine = content.map[(Int, List[String]), TreeMap[Int, List[String]]](line => {
+    //   val words = line.split(' ').toList
+    //   (words.length, words)
+    // })
 
 
     system.waitUntilAllClosed()
