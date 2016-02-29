@@ -87,7 +87,27 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
     RDD(resList)
   }
 
-  def groupBy[K, IS <: Traversable[T], RS <: Traversable[(K, IS)]](f: Spore[T, K]): MapRDD[K, IS, RS] = ???
+  def groupBy[K, IS <: Traversable[T], RS <: Traversable[(K, IS)]](f: Spore[T, K])(implicit cbf1: CanBuildTo[T, IS], cbf2: CanBuildTo[(K, IS), RS]): MapRDD[K, IS, RS] = {
+    val resList = silos.map {
+      s => s.apply[(K,  IS), RS](spore {
+        val lf = f
+        val lcbf1 = cbf1
+        val lcbf2 = cbf2
+        content => {
+          val res0 = content.groupBy(lf)
+          val b1 = lcbf1()
+          val b2 = lcbf2()
+          res0.foreach{case (k, vals) => {
+            b1 ++= vals
+            b2 += (k -> b1.result())
+            b1.clear()
+          }}
+          b2.result()
+        }
+      })
+    }
+    new MapRDD[K, IS, RS](resList)
+  }
 
   def flatMap[B, V <: Traversable[B]](f: Spore[T, Seq[B]])(implicit cbt1: CanBuildTo[B, V]): RDD[B, V] = {
     val resList = silos.map {
