@@ -52,6 +52,8 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       promise
   }
 
+  def resetPromise(id: Int): Unit = promiseOf -= id
+
   class RemoteEmitter[T](destNodeActor: ActorRef, emitterId: Int, destRefId: Int) extends Emitter[T] {
     def emit(v: T)(implicit pickler: Pickler[T], unpickler: Unpickler[T]): Unit = {
       // println(s"using pickler of class type ${pickler.getClass.getName} to pickle $v")
@@ -163,7 +165,8 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       }
 
     case msg @ Graph(n) =>
-      // println(s"node actor: received graph with node $n")
+      println(s"node actor: received graph with node $n")
+      println(s"graph is: ${msg}")
 
       n match {
         // expect a ForceResponse(value)
@@ -178,6 +181,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
             promise.success(newSilo)
             println(s"responding to ${localSender.path.name}")
             localSender ! ForceResponse(res)
+            resetPromise(app.refId)
           }
 
         case fm: FMapped[u, t, v, s] =>
@@ -191,6 +195,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
               val newSilo = new LocalSilo[v, s](data)
               promise.success(newSilo)
               localSender ! ForceResponse(data)
+              resetPromise(fm.refId)
             }
           }
 
@@ -232,6 +237,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
                 s ! ForceResponse(silo.value)
               }
           }
+          resetPromise(refId)
       }
 
     // case class DoPumpTo[A, B](node: Node, fun: (A, Emitter[B]) => Unit, emitterId: Int, destHost: Host, destRefId: Int)
