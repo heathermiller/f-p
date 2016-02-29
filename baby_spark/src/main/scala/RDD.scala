@@ -38,12 +38,12 @@ object RDD {
     }).map { RDD(_) }
   }
 
-  implicit def RDD2MapRDD[K, V, S[A, B] <: Traversable[(A, B)]](rdd: RDD[(K, V), S[K, V]]): MapRDD[K, V, S] = {
+  implicit def RDD2MapRDD[K, V, S <: Traversable[(K, V)]](rdd: RDD[(K, V), S]): MapRDD[K, V, S] = {
     return new MapRDD[K, V, S](rdd.silos)
   }
 
-  implicit def MapRDD2RDD[K, V, S[A, B] <: Traversable[(A, B)]](rdd: MapRDD[K, V, S]): RDD[(K, V), S[K, V]] = {
-    return new RDD[(K, V), S[K, V]](rdd.silos)
+  implicit def MapRDD2RDD[K, V, S <: Traversable[(K, V)]](rdd: MapRDD[K, V, S]): RDD[(K, V), S] = {
+    return new RDD[(K, V), S](rdd.silos)
   }
 
   // implicit def TupleRDD2PairRDD[K, V, S <: Traversable[(K, V)]](rdds: Tuple2[MapRDD[K, V, S], MapRDD[K, V, S]]): PairRDD[K, V, S] = {
@@ -134,14 +134,14 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 }
 
 // S == Type storing the (K, V) pairs
-class MapRDD[K, V, S[A, B] <: Traversable[(A, B)]](override val silos: Seq[SiloRef[(K, V), S[K, V]]]) extends RDD[(K, V), S[K, V]](silos) {
+class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K, V), S]]) extends RDD[(K, V), S](silos) {
   def reduceByKey(f: Spore2[V, V, V]): MapRDD[K, V, S] = ???
 
   def groupByKey(): MapRDD[K, V, S] = ???
 
   // TJoin: Traversable to use to store the Tuple(V, V2)
-  def join[W](other: MapRDD[K, W, S])(implicit cbf1: CanBuildTo[(K, Tuple2[V, W]), S[K, Tuple2[V, W]]], cbf2: CanBuildTo[(K, W), S[K, W]], ec: ExecutionContext): MapRDD[K, Tuple2[V, W], S] = {
-    flatMap[(K, Tuple2[V, W]), S[K, Tuple2[V, W]]](spore {
+  def join[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, W))]](other: MapRDD[K, W, S2])(implicit ec: ExecutionContext, cbf1: CanBuildTo[(K, (V, W)), FS], cbf2: CanBuildTo[(K, W), S2]): MapRDD[K, Tuple2[V, W], FS] = {
+    flatMap[(K, Tuple2[V, W]), FS](spore {
       val rdd = other
       val lcbf1 = cbf1
       val lcbf2 = cbf2
@@ -178,17 +178,17 @@ object RDDExample {
     Await.ready(started, 1.seconds)
 
     val content = Await.result(RDD.fromTextFile("data/data.txt"), Duration.Inf)
+    val lorem = Await.result(RDD.fromTextFile("data/lorem.txt"), Duration.Inf)
 
-    val sl1 = content.map[(Int, List[String]), TreeMap[Int, List[String]]](line => {
-      val words = line.split(' ').toList
-      (words.length, words)
-    })
-    val sl2 = content.map[(Int, List[String]), TreeMap[Int, List[String]]](line => {
-      val words = line.split(' ').toList
-      (words.length, words)
-    })
+    val contentWord = content.flatMap(line => {
+      line.split(' ').toList
+    }).map(word => (word.length, word))
 
-    val res = sl1.join(sl2).collect()
+    val loremWord = lorem.flatMap(line => {
+      line.split(' ').toList
+    }).map(word => (word.length, word))
+
+    val res = contentWord.join(loremWord).collect()
 
     println(s"Result... ${res}")
 
