@@ -135,9 +135,22 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 
 // S == Type storing the (K, V) pairs
 class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K, V), S]]) extends RDD[(K, V), S](silos) {
-  def reduceByKey(f: Spore2[V, V, V]): MapRDD[K, V, S] = ???
+  def reduceByKey[RS <: Traversable[(K, V)]](f: Spore2[V, V, V]): MapRDD[K, V, RS] = ???
 
-  def groupByKey(): MapRDD[K, V, S] = ???
+  def groupByKey[RS <: Traversable[(K, Seq[V])]]()(implicit cbf1: CanBuildTo[(K, Seq[V]), RS], cbf2: CanBuildTo[V, Seq[V]]): MapRDD[K, Seq[V], RS] = {
+    val resList = silos.map {
+      s => s.apply[(K, Seq[V]), RS](spore {
+        val lcbf = cbf1
+        val lcbf2 = cbf2
+        c => {
+          val res0 = c.groupBy(_._1)
+          val res1 = res0.map(e => (e._1, e._2.map(_._2)(collection.breakOut(lcbf2))))(collection.breakOut(lcbf))
+          res1
+        }
+      })
+    }
+    new MapRDD[K, Seq[V], RS](resList)
+  }
 
   // TJoin: Traversable to use to store the Tuple(V, V2)
   def join[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, W))]](other: MapRDD[K, W, S2])(implicit ec: ExecutionContext, cbf1: CanBuildTo[(K, (V, W)), FS], cbf2: CanBuildTo[(K, W), S2]): MapRDD[K, Tuple2[V, W], FS] = {
@@ -188,7 +201,9 @@ object RDDExample {
       line.split(' ').toList
     }).map(word => (word.length, word))
 
-    val res = contentWord.join(loremWord).collect()
+    val res = contentWord.groupByKey[TreeMap[Int, Seq[String]]]().collect()
+
+    // val res = contentWord.join(loremWord).groupByKey[TreeMap[Int, Seq[(String, String)]]]().collect()
 
     println(s"Result... ${res}")
 
