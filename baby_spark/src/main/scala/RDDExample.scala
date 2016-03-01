@@ -53,7 +53,7 @@ object RDDExample {
       line.split(' ').toList
     }).map(word => (word.length, word))
 
-    val res = contentWord.join[Set[String], TreeMap[Int, Set[String]]](loremWord).collectMap()
+    val res = contentWord.join[Set[String], Map[Int, Set[String]]](loremWord).collectMap()
 
     println(s"Result... ${res}")
 

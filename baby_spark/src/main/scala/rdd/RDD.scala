@@ -122,6 +122,8 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
     RDD(resList)
   }
 
+  def union(other : RDD[T, S]): RDD[T, S] = RDD(silos ++ other.silos)
+
   def reduce(f: Spore2[T, T, T])(implicit ec: ExecutionContext): T = {
     val resList = silos.map {
       s => s.apply[T, List[T]](spore {
