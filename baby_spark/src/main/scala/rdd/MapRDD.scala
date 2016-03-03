@@ -1,6 +1,8 @@
 package baby_spark
 package rdd
 
+import scala.language.higherKinds
+
 import scala.spores._
 import scala.pickling._
 import Defaults._
@@ -10,14 +12,13 @@ import scala.concurrent._
 import silt._
 
 
-
 class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K, V), S]])
     extends RDD[(K, V), S](silos) {
 
-  def reduceByKey[RS <: Traversable[(K, V)]](f: Spore2[V, V, V])
-    (implicit cbf1: CanBuildTo[(K, V), RS]): MapRDD[K, V, RS] = {
+  def reduceByKey[RS[A, B] <: Traversable[(A, B)]](f: Spore2[V, V, V])
+    (implicit cbf1: CanBuildTo[(K, V), RS[K, V]]): MapRDD[K, V, RS[K, V]] = {
     val resList = silos.map {
-      s => s.apply[(K, V), RS](spore {
+      s => s.apply[(K, V), RS[K, V]](spore {
         val func = f
         val lcbf = cbf1
         c => {
@@ -33,10 +34,10 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K,
 
   // IS: Traversable type used to store the value for one key
   // RS: Traversable type used to store the mapping key/value
-  def groupByKey[IS <: Traversable[V], RS <: Traversable[(K, IS)]]()
-    (implicit cbf1: CanBuildTo[(K, IS), RS], cbf2: CanBuildTo[V, IS]): MapRDD[K, IS, RS] = {
+  def groupByKey[IS[A] <: Traversable[A], RS[A, B] <: Traversable[(A, B)]]()
+    (implicit cbf1: CanBuildTo[(K, IS[V]), RS[K, IS[V]]], cbf2: CanBuildTo[V, IS[V]]): MapRDD[K, IS[V], RS[K, IS[V]]] = {
     val resList = silos.map {
-      s => s.apply[(K, IS), RS](spore {
+      s => s.apply[(K, IS[V]), RS[K, IS[V]]](spore {
         val lcbf = cbf1
         val lcbf2 = cbf2
         c => {
@@ -46,7 +47,7 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K,
         }
       })
     }
-    new MapRDD[K, IS, RS](resList)
+    new MapRDD[K, IS[V], RS[K, IS[V]]](resList)
   }
 
   def mapValues[W, RS <: Traversable[(K, W)]](f: Spore[V, W])
@@ -57,10 +58,10 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K,
     })
   }
 
-  def join[IS <: Traversable[V], RS <: Traversable[(K, IS)]]
+  def join[IS[A] <: Traversable[A], RS[A, B] <: Traversable[(A, B)]]
     (other: MapRDD[K, V, S])
-    (implicit cbf1: CanBuildTo[(K, IS), RS],
-      cbf2: CanBuildTo[V, IS]): MapRDD[K, IS, RS] = {
+    (implicit cbf1: CanBuildTo[(K, IS[V]), RS[K, IS[V]]],
+      cbf2: CanBuildTo[V, IS[V]]): MapRDD[K, IS[V], RS[K, IS[V]]] = {
 
     val rdd1 = groupByKey[IS, RS]()
     val rdd2 = other.groupByKey[IS, RS]()
@@ -93,4 +94,6 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K,
       }
     })
   }
+
+  def union(other: MapRDD[K, V, S]): MapRDD[K, V, S] = new MapRDD(silos ++ other.silos)
 }

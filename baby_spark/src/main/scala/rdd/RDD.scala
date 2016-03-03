@@ -22,6 +22,7 @@ import Scalaz._
 
 import silt._
 
+
 object RDD {
   def apply[T, S <: Traversable[T]](silos: SiloRef[T, S]): RDD[T, S] =
     new RDD(List(silos))
@@ -31,7 +32,7 @@ object RDD {
     new RDD(silos)
 
   // Future isn't needed if instead the creation of a Silo returns a SiloRef directly
-  def fromTextFile(filename: String)(implicit system: SiloSystem, host: Host, ec: ExecutionContext): Future[RDD[String, List[String]]] = {
+  def fromTextFile(filename: String, host: Host)(implicit system: SiloSystem, ec: ExecutionContext): Future[RDD[String, List[String]]] = {
     system.fromFun(host)(spore {
       val fl = filename
       _: Unit => {
@@ -41,11 +42,11 @@ object RDD {
     }).map { RDD(_) }
   }
 
-  implicit def RDD2MapRDD[K, V, S <: Traversable[(K, V)]](rdd: RDD[(K, V), S]): MapRDD[K, V, S] = {
+  implicit def mapRDD[K, V, S <: Traversable[(K, V)]](rdd: RDD[(K, V), S]): MapRDD[K, V, S] = {
     new MapRDD[K, V, S](rdd.silos)
   }
 
-  implicit def MapRDD2Semigroup[K, V : Semigroup, S <: Traversable[(K, V)]: Semigroup](rdd: MapRDD[K, V, S]): MapSemigroupRDD[K, V, S] =
+  implicit def semigroup[K, V : Semigroup, S <: Traversable[(K, V)]: Semigroup](rdd: MapRDD[K, V, S]): MapSemigroupRDD[K, V, S] =
     new MapSemigroupRDD(rdd.silos)
 
 }

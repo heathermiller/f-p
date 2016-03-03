@@ -4,6 +4,7 @@ import scala.pickling._
 import Defaults._
 
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 import scala.collection.mutable
 import scala.collection.concurrent.TrieMap
 
@@ -43,6 +44,7 @@ trait SiloSystem {
   }
 
   def waitUntilAllClosed(): Unit
+  def waitUntilAllClosed(tm1: FiniteDuration, tm2: FiniteDuration): Unit
 }
 
 // abstracts from different network layer backends

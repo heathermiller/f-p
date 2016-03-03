@@ -98,7 +98,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
   }
 
   def receive = {
-    case Terminate =>
+    case Terminate() =>
       println(s"number objects pickled: ${numPickled.get}")
       context.stop(self)
 
@@ -136,7 +136,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       // IDEA: same pattern for spores, again!
       val s = sender
       Future {
-        val newSilo = fun()
+        val newSilo = fun(())
         promise.success(newSilo)
 
         println(s"SERVER: created $newSilo. responding...")

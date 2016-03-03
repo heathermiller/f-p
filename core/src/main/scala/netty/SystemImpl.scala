@@ -21,6 +21,7 @@ import _root_.io.netty.channel.socket.nio.NioSocketChannel
 import Implicits._
 
 import scala.concurrent.{Future, Promise}
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Try, Success, Failure}
 import scala.collection.mutable
@@ -93,6 +94,9 @@ class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
     }
   }
 
+  def waitUntilAllClosed(tm1: FiniteDuration, tm2: FiniteDuration): Unit = {
+    waitUntilAllClosed()
+  }
   // client method
   def waitUntilAllClosed(): Unit = {
     for ((a, s) <- statusOf) {

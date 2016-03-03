@@ -61,6 +61,7 @@ object build extends Build {
     base = file("baby_spark"),
     settings = standardSettings ++ SbtMultiJvm.multiJvmSettings ++ Seq[Sett](
       name := "baby_spark",
+      fork := true,
       libraryDependencies ++= Seq(
         "org.scalaz" %% "scalaz-core" % "7.2.0"
       ),
