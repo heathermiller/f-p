@@ -35,6 +35,8 @@ trait SiloRef[W, T <: Traversable[W]] {
 
   def send(): Future[T]
 
+  def cache(): SiloRef[W, T]
+
   def pumpTo[V, R <: Traversable[V], P <: Spore2[W, Emitter[V], Unit]](destSilo: SiloRef[V, R])(fun: P)
                                     (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = ???
 

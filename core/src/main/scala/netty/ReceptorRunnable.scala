@@ -197,7 +197,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         replyMsg.id = theMsg.id
         resultPromise.success(Some(replyMsg))
 
-      case msg @ Graph(n) =>
+      case msg @ Graph(n, _) =>
         println(s"SERVER: received graph with node $n")
         n match { // in each case complete `resultPromise` with ForceResponse(value)
           case m: Materialized =>
@@ -217,7 +217,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
             } else {
               val inputPromise = Promise[Option[Any]]()
               // println("handling Apply, app.input: " + app.input)
-              val localMsg = new HandleIncomingLocal(Graph(app.input), ctx, inputPromise)
+              val localMsg = new HandleIncomingLocal(Graph(app.input, false), ctx, inputPromise)
               queue.add(localMsg)
               inputPromise.future.foreach { case Some(ForceResponse(value)) =>
                 // println(s"yay: input graph is materialized")
@@ -290,7 +290,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         // kick off materialization
         println(s"NODE ${node.refId}: kick off materialization by sending Graph($node)")
         // self ! Graph(node)
-        val localMsg = new HandleIncomingLocal(Graph(node), ctx, Promise[Option[Any]]())
+        val localMsg = new HandleIncomingLocal(Graph(node, false), ctx, Promise[Option[Any]]())
         queue.add(localMsg)
 
       case Emit(emitterId, destRefId, ba) =>

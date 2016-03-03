@@ -28,7 +28,7 @@ final case class PumpNodeInput[U, V, R, P](from: Node, fromHost: Host, fun: P,
   pickler: Pickler[P], unpickler: Unpickler[P], bf: BuilderFactory[V, R])
 
 // remote message
-final case class Graph(node: Node) extends ReplyMessage
+final case class Graph(node: Node, cache: Boolean) extends ReplyMessage
 
 sealed abstract class Command
 // remote message

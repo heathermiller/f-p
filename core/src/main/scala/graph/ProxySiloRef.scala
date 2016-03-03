@@ -34,14 +34,23 @@ abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(
     destSilo.asInstanceOf[ProxySiloRef[V, R]].addInput(PumpToInput(this, fun, pickler, unpickler, bf))
   }
 
-  def send(): Future[T] = {
+  private def materialize(cache: Boolean): Future[T] = {
     // 1. build graph
     val n = node()
     // 2. send graph to node which contains `this` Silo
     print(s"looking up refId $refId...")
     val host = system.location(refId)
     println(s" $host")
-    system.send(host, Graph(n)).map(_.asInstanceOf[T])
+    system.send(host, Graph(n, cache)).map(_.asInstanceOf[T])
+  }
+
+  def send(): Future[T] = {
+    materialize(false)
+  }
+
+  def cache(): SiloRef[W, T] = {
+    materialize(true)
+    this
   }
 
   override def flatMap[V, S <: Traversable[V]](fun: Spore[T, SiloRef[V, S]])

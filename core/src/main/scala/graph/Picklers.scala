@@ -145,6 +145,11 @@ object Picklers {
         b.hintTag(tag)
         NodePU.pickle(node, b)
       })
+      builder.putField("cache", { b =>
+        val tag = implicitly[FastTypeTag[Boolean]]
+        b.hintTag(tag)
+        scala.pickling.pickler.AllPicklers.booleanPickler.pickle(picklee.cache, b)
+      })
       builder.endEntry()
     }
 
@@ -156,7 +161,12 @@ object Picklers {
       println(s"GraphPU: unpickle, tag: $tag, tag1: $tag1")
       val node = NodePU.unpickle(tag1, reader1).asInstanceOf[Node]
       reader1.endEntry()
-      Graph(node)
+
+      val reader2 = reader.readField("cache")
+      val tag2 = reader2.beginEntry()
+      val cache = scala.pickling.pickler.AllPicklers.booleanPickler.unpickle(tag2, reader2).asInstanceOf[Boolean]
+      reader2.endEntry()
+      Graph(node, cache)
     }
   }
 

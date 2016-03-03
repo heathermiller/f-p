@@ -1,6 +1,7 @@
 package silt
 package actors
 
+import scala.collection.mutable.HashMap
 import scala.language.existentials
 
 import akka.actor.{Actor, ActorRef}
@@ -40,6 +41,8 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
   val promiseOf: mutable.Map[Int, Promise[LocalSilo[_, _]]] = new TrieMap[Int, Promise[LocalSilo[_, _]]]
 
   val numPickled = new AtomicInteger(0)
+
+  val cacheMap: mutable.Map[Node, LocalSilo[_, _]] = new HashMap[Node, LocalSilo[_, _]]
 
   def getOrElseInitPromise(id: Int): Promise[LocalSilo[_, _]] = promiseOf.get(id) match {
     case None =>
@@ -97,6 +100,13 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
     (destNodeActor ? createSiloMsg).map { x =>
       new RemoteEmitter[T](destNodeActor, emitterId, destRefId)
     }
+  }
+
+  def respondSilo(promise: Promise[LocalSilo[_, _]], sender: ActorRef, silo: LocalSilo[_, _], refId: Int): Unit = {
+    promise.success(silo)
+    println(s"responding to ${sender.path.name}")
+    sender ! ForceResponse(silo.value)
+    resetPromise(refId)
   }
 
   def receive = {
@@ -164,7 +174,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
         s ! replyMsg
       }
 
-    case msg @ Graph(n) =>
+    case msg @ Graph(n, cache) =>
       println(s"node actor: received graph with node $n")
       println(s"graph is: ${msg}")
 
@@ -174,28 +184,41 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
           val fun = app.fun
           val promise = getOrElseInitPromise(app.refId)
           val localSender = sender
-          (self ? Graph(app.input)).map { case ForceResponse(value) =>
-            println(s"yay: input graph is materialized")
-            val res = fun(value.asInstanceOf[t])
-            val newSilo = new LocalSilo[v, s](res)
-            promise.success(newSilo)
-            println(s"responding to ${localSender.path.name}")
-            localSender ! ForceResponse(res)
-            resetPromise(app.refId)
+          if (cacheMap.contains(n)) {
+            val res = cacheMap(n)
+            respondSilo(promise, localSender, res, app.refId)
+          }
+          else {
+            (self ? Graph(app.input, false)).map { case ForceResponse(value) =>
+              println(s"yay: input graph is materialized")
+              val res = fun(value.asInstanceOf[t])
+              val newSilo = new LocalSilo[v, s](res)
+              if (cache) {
+                cacheMap += (n -> newSilo)
+              } else {
+                respondSilo(promise, localSender, newSilo, app.refId)
+              }
+            }
           }
 
         case fm: FMapped[u, t, v, s] =>
           val fun = fm.fun
           val promise = getOrElseInitPromise(fm.refId)
           val localSender = sender
-          (self ? Graph(fm.input)).map { case ForceResponse(value) =>
+          if (cacheMap.contains(n)) {
+            val res = cacheMap(n)
+            respondSilo(promise, localSender, res, fm.refId)
+          }
+          (self ? Graph(fm.input, false)).map { case ForceResponse(value) =>
             val resSilo = fun(value.asInstanceOf[t])
             val res = resSilo.send()
             res.map { case data =>
               val newSilo = new LocalSilo[v, s](data)
-              promise.success(newSilo)
-              localSender ! ForceResponse(data)
-              resetPromise(fm.refId)
+              if (cache) {
+                cacheMap += (n -> newSilo)
+              } else {
+                respondSilo(promise, localSender, newSilo, fm.refId)
+              }
             }
           }
 
@@ -261,7 +284,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
 
       // kick off materialization
       // println(s"NODE ${node.refId}: kick off materialization by sending Graph($node)")
-      self ! Graph(node)
+      self ! Graph(node, false)
 
     /*
      *  @tparam a old element type

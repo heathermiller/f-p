@@ -136,6 +136,43 @@ object RDDExample {
     genericClass()
   }
 
+  def testCache(system: SystemImpl, hosts: Seq[Host]): Unit = {
+    val fTime = java.lang.System.currentTimeMillis _
+
+    val silo = Await.result(system.fromFun(hosts(0))(spore {
+      _: Unit => {
+        new LocalSilo[Int, List[Int]](List((1)))
+      }
+    }), 10.seconds)
+
+    val timeSiloCached = silo.apply[Long, List[Long]](spore {
+      val f = fTime
+      c => {
+        val time = f()
+        println(s"Time is: $time")
+        c.map(x => time)
+      }
+    }).cache()
+
+    val timeSiloNotCached = silo.apply[Long, List[Long]](spore {
+      val f = fTime
+      c => {
+        val time = f()
+        println(s"Time is: $time")
+        c.map(x => time)
+      }
+    })
+
+    val res1cached = Await.result(timeSiloCached.send(), 10.seconds)
+    val res1not = Await.result(timeSiloNotCached.send(), 10.seconds)
+    Thread.sleep(2000)
+    val res2cached = Await.result(timeSiloCached.send(), 10.seconds)
+    val res2not = Await.result(timeSiloNotCached.send(), 10.seconds)
+
+    println(s"Cache: Res 1 = $res1cached | Res2 = $res2cached")
+    println(s"Not cache: Res 1 = $res1not | Res2 = $res2not")
+  }
+
 
   def main(args: Array[String]): Unit = {
     implicit val system = new SystemImpl
@@ -145,8 +182,9 @@ object RDDExample {
 
     Await.ready(started, 1.seconds)
 
-    println("Running examples")
-    externalDependencyExample(system)
+    // println("Running examples")
+    // externalDependencyExample(system)
+    testCache(system, hosts)
 
     system.waitUntilAllClosed(30.seconds, 30.seconds)
   }
