@@ -515,7 +515,7 @@ object Picklers {
       reader5.endEntry()
       val unpickler = Unsafe.instance.allocateInstance(Class.forName(unpicklerClassName)).asInstanceOf[Unpickler[Spore[T, S]]]
 
-      Apply[U, T, V, S](input.asInstanceOf[Node], refId.asInstanceOf[Int], fun.asInstanceOf[T => S], pickler, unpickler)
+      Apply[U, T, V, S](input.asInstanceOf[Node], refId.asInstanceOf[Int], fun.asInstanceOf[Spore[T, S]], pickler, unpickler)
     }
   }
 
@@ -621,7 +621,7 @@ object Picklers {
       reader5.endEntry()
       val unpickler = Unsafe.instance.allocateInstance(Class.forName(unpicklerClassName)).asInstanceOf[Unpickler[Spore[T, SiloRef[V, S]]]]
 
-      FMapped[U, T, V, S](input.asInstanceOf[Node], refId.asInstanceOf[Int], fun.asInstanceOf[T => SiloRef[V, S]], pickler, unpickler)
+      FMapped[U, T, V, S](input.asInstanceOf[Node], refId.asInstanceOf[Int], fun.asInstanceOf[Spore[T, SiloRef[V, S]]], pickler, unpickler)
     }
   }
 

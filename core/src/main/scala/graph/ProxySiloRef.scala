@@ -66,7 +66,7 @@ abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(
 }
 
 class ApplySiloRef[V, S <: Traversable[V], U, T <: Traversable[U]]
-                  (val input: ProxySiloRef[V, S], val refId: Int, val f: S => T,
+  (val input: ProxySiloRef[V, S], val refId: Int, val f: Spore[S, T],
                    val pickler: Pickler[Spore[S, T]], val unpickler: Unpickler[Spore[S, T]])
   (implicit system: SiloSystemInternal) extends ProxySiloRef[U, T](refId, input.host) { // result on same host as input
   def node(): Node = {
