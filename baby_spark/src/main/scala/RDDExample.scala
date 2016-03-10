@@ -24,7 +24,9 @@ import silt.actors._
 
 object RDDExample {
 
-  implicit def TreeMapSemigroup[K, V : Semigroup](implicit ordering: scala.Ordering[K]): Semigroup[TreeMap[K, V]] = new Semigroup[TreeMap[K, V]] with std.MapInstances with std.MapFunctions {
+  implicit def TreeMapSemigroup[K, V : Semigroup]
+    (implicit ordering: scala.Ordering[K]): Semigroup[TreeMap[K, V]] =
+    new Semigroup[TreeMap[K, V]] with std.MapInstances with std.MapFunctions {
     def zero = new TreeMap[K, V]()(ordering)
     // Repetition of scalaz.std.Map: method apppend defined in mapMonoid
     override def append(m1: TreeMap[K, V], m2: => TreeMap[K, V]): TreeMap[K, V] = {

@@ -1,6 +1,8 @@
 package silt
 package graph
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.spores._
 import scala.pickling._
 import Defaults._
@@ -49,7 +51,7 @@ abstract class ProxySiloRef[W, T <: Traversable[W]](refId: Int, val host: Host)(
   }
 
   def cache(): SiloRef[W, T] = {
-    materialize(true)
+    Await.ready(materialize(true), Duration.Inf)
     this
   }
 
