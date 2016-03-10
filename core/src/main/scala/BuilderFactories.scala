@@ -1,23 +1,23 @@
 package silt
 
 
-object BuilderFactory {
+// object BuilderFactory {
 
-  implicit def listBuilderFactory[T]: BuilderFactory[T, List[T]] =
-    new ListBuilderFactory[T]
+//   implicit def listBuilderFactory[T]: BuilderFactory[T, List[T]] =
+//     new ListBuilderFactory[T]
 
-}
+// }
 
-trait BuilderFactory[T, R] {
+// trait BuilderFactory[T, R] {
 
-  def mkBuilder(): AbstractBuilder { type Elem = T; type Coll = R }
+//   def mkBuilder(): AbstractBuilder { type Elem = T; type Coll = R }
 
-}
+// }
 
-// needs a pickler!
-class ListBuilderFactory[T] extends BuilderFactory[T, List[T]] {
+// // needs a pickler!
+// class ListBuilderFactory[T] extends BuilderFactory[T, List[T]] {
 
-  def mkBuilder(): AbstractBuilder { type Elem = T; type Coll = List[T] } =
-    new ListBuilder[T]
+//   def mkBuilder(): AbstractBuilder { type Elem = T; type Coll = List[T] } =
+//     new ListBuilder[T]
 
-}
+// }

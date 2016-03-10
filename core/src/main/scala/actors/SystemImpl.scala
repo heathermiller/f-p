@@ -98,7 +98,7 @@ class SystemImpl extends SiloSystem with SiloSystemInternal {
     systemActor ? ChangePort(port)
   }
 
-  def initRequest[U, T <: Traversable[U], V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[U, T]] = {
+  def initRequest[T, V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[T]] = {
     (systemActor ? StartNodeActors(3)).flatMap { x =>
       val nodeActor    = Config.m(host)
       val refId        = refIds.incrementAndGet()
@@ -108,7 +108,7 @@ class SystemImpl extends SiloSystem with SiloSystemInternal {
       (nodeActor ? initSilo).map { x =>
         println("SystemImpl: got response for InitSilo msg")
         // create a typed wrapper
-        new MaterializedSiloRef[U, T](refId, host)(this)
+        new MaterializedSiloRef[T](refId, host)(this)
       }
     }
   }

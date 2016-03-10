@@ -12,13 +12,13 @@ import scala.concurrent._
 import silt._
 
 
-class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K, V), S]])
+class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[S]])
     extends RDD[(K, V), S](silos) {
 
   def reduceByKey[RS[A, B] <: Traversable[(A, B)]](f: Spore2[V, V, V])
     (implicit cbf1: CanBuildTo[(K, V), RS[K, V]]): MapRDD[K, V, RS[K, V]] = {
     val resList = silos.map {
-      s => s.apply[(K, V), RS[K, V]](spore {
+      s => s.apply[RS[K, V]](spore {
         val func = f
         val lcbf = cbf1
         c => {
@@ -37,7 +37,7 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[(K,
   def groupByKey[IS[A] <: Traversable[A], RS[A, B] <: Traversable[(A, B)]]()
     (implicit cbf1: CanBuildTo[(K, IS[V]), RS[K, IS[V]]], cbf2: CanBuildTo[V, IS[V]]): MapRDD[K, IS[V], RS[K, IS[V]]] = {
     val resList = silos.map {
-      s => s.apply[(K, IS[V]), RS[K, IS[V]]](spore {
+      s => s.apply[RS[K, IS[V]]](spore {
         val lcbf = cbf1
         val lcbf2 = cbf2
         c => {

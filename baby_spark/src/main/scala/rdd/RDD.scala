@@ -24,11 +24,10 @@ import silt._
 
 
 object RDD {
-  def apply[T, S <: Traversable[T]](silos: SiloRef[T, S]): RDD[T, S] =
+  def apply[T, S <: Traversable[T]](silos: SiloRef[S]): RDD[T, S] =
     new RDD(List(silos))
 
-
-  def apply[T, S <: Traversable[T]](silos: Seq[SiloRef[T, S]]): RDD[T, S] =
+  def apply[T, S <: Traversable[T]](silos: Seq[SiloRef[S]]): RDD[T, S] =
     new RDD(silos)
 
   // Future isn't needed if instead the creation of a Silo returns a SiloRef directly
@@ -37,7 +36,7 @@ object RDD {
       val fl = filename
       _: Unit => {
         val lines = Source.fromFile(fl).mkString.split('\n').toList
-        new LocalSilo[String, List[String]](lines)
+        new LocalSilo[List[String]](lines)
       }
     }).map { RDD(_) }
   }
@@ -51,7 +50,7 @@ object RDD {
 
 }
 
-class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
+class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[S]]) {
 
   // Trick from https://stackoverflow.com/questions/3225675/can-i-pimp-my-library-with-an-analogue-of-traversablelike-map-that-has-nicely
   // Note
@@ -59,7 +58,7 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 
   def map[B, V <: Traversable[B]](f: Spore[T, B])(implicit cbt: CanBuildTo[B, V]): RDD[B, V] = {
     RDD(silos.map {
-      s => s.apply[B, V](spore {
+      s => s.apply[V](spore {
         val localFunc = f
         implicit val lCbt = cbt
         content => {
@@ -71,7 +70,7 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 
   def filter(f: Spore[T, Boolean])(implicit cbf: CanBuildTo[T, S]): RDD[T, S] = {
     val resList = silos.map {
-      s => s.apply[T, S](spore {
+      s => s.apply[S](spore {
         val lf = f
         val lcbf = cbf
         content => {
@@ -90,7 +89,7 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 
   def groupBy[K, IS <: Traversable[T], RS <: Traversable[(K, IS)]](f: Spore[T, K])(implicit cbf1: CanBuildTo[T, IS], cbf2: CanBuildTo[(K, IS), RS]): MapRDD[K, IS, RS] = {
     val resList = silos.map {
-      s => s.apply[(K,  IS), RS](spore {
+      s => s.apply[RS](spore {
         val lf = f
         val lcbf1 = cbf1
         val lcbf2 = cbf2
@@ -112,7 +111,7 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 
   def flatMap[B, V <: Traversable[B]](f: Spore[T, Seq[B]])(implicit cbt1: CanBuildTo[B, V]): RDD[B, V] = {
     val resList = silos.map {
-      s => s.apply[B, V](spore {
+      s => s.apply[V](spore {
         val func = f
         implicit val lcbt1 = cbt1
         content => {
@@ -127,7 +126,7 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 
   def reduce(f: Spore2[T, T, T])(implicit ec: ExecutionContext): T = {
     val resList = silos.map {
-      s => s.apply[T, List[T]](spore {
+      s => s.apply[List[T]](spore {
         val reducer = f
         content => {
           content.reduce(reducer) :: Nil
@@ -147,7 +146,7 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[T, S]]) {
 
   def count()(implicit ec: ExecutionContext): Long = {
     val resList = silos.map {
-      s => s.apply[Long, List[Long]](spore {
+      s => s.apply[List[Long]](spore {
         content => content.size.longValue :: Nil
       }).send()
     }

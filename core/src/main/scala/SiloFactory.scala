@@ -1,6 +1,6 @@
 package silt
 
 
-trait SiloFactory[U, T <: Traversable[U]] {
-  def data: LocalSilo[U, T]
+trait SiloFactory[T] {
+  def data: LocalSilo[T]
 }

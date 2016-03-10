@@ -20,7 +20,7 @@ import scala.collection.Traversable
  *  @tparam W
  *  @tparam T the type corresponding to the referenced silo's data
  */
-trait SiloRef[W, T <: Traversable[W]] {
+trait SiloRef[T] {
 
   /** Takes a spore that is to be applied to the data in the referenced silo.
    *
@@ -30,18 +30,18 @@ trait SiloRef[W, T <: Traversable[W]] {
    *  
    *  @param fun the spore to be applied on the data pointed to by this `SiloRef`
    */ 
-  def apply[V, S <: Traversable[V]](fun: Spore[T, S])
-                                   (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[V, S]
+  def apply[S](fun: Spore[T, S])
+                                   (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S]
 
   def send(): Future[T]
 
-  def cache(): SiloRef[W, T]
+  def cache(): SiloRef[T]
 
-  def pumpTo[V, R <: Traversable[V], P <: Spore2[W, Emitter[V], Unit]](destSilo: SiloRef[V, R])(fun: P)
-                                    (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = ???
+  // def pumpTo[R, P <: Spore2[W, Emitter[V], Unit]](destSilo: SiloRef[V, R])(fun: P)
+  //                                   (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = ???
 
-  def flatMap[V, S <: Traversable[V]](fun: Spore[T, SiloRef[V, S]])
-                                     (implicit pickler: Pickler[Spore[T, SiloRef[V, S]]], unpickler: Unpickler[Spore[T, SiloRef[V, S]]]): SiloRef[V, S] = ???
+  def flatMap[S](fun: Spore[T, SiloRef[S]])
+                                     (implicit pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]): SiloRef[S]
 
   def id: SiloRefId
 
@@ -53,28 +53,28 @@ final case class Host(address: String, port: Int)
 final case class SiloRefId(value: Int)
 
 // this does not extend SiloRef. Silos and SiloRefs are kept separate.
-class LocalSilo[U, T <: Traversable[U]](private[silt] val value: T) {
+class LocalSilo[T](private[silt] val value: T) {
 
-  def internalApply[A, V, B <: Traversable[V]](fun: A => B): LocalSilo[V, B] = {
+  def internalApply[A, B](fun: A => B): LocalSilo[B] = {
     val typedFun = fun.asInstanceOf[T => B]
     println(s"LocalSilo: value = $value")
     val res = typedFun(value)
     println(s"LocalSilo: result of applying function: $res")
-    new LocalSilo[V, B](res)
+    new LocalSilo[B](res)
   }
 
   def send(): Future[T] = {
     Future.successful(value)
   }
 
-  def doPumpTo[A, B](existFun: Function2[A, Emitter[B], Unit], emitter: Emitter[B]): Unit = {
-    val fun = existFun.asInstanceOf[Function2[U, Emitter[B], Unit]]
-    Future {
-      value.foreach { elem =>
-        // println(s"visiting element $elem")
-        fun(elem, emitter)
-      }
-      emitter.done()
-    }
-  }
+  // def doPumpTo[A, B](existFun: Function2[A, Emitter[B], Unit], emitter: Emitter[B]): Unit = {
+  //   val fun = existFun.asInstanceOf[Function2[U, Emitter[B], Unit]]
+  //   Future {
+  //     value.foreach { elem =>
+  //       // println(s"visiting element $elem")
+  //       fun(elem, emitter)
+  //     }
+  //     emitter.done()
+  //   }
+  // }
 }

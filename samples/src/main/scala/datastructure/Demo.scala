@@ -59,6 +59,10 @@ object Demo {
   }
 
   // called for each tree silo
+  // take a Map[Int, Person], return a list of silos with a list of Person, grouped by age
+  // To do so, it first takes a Silo with a Map[Int, Person], split them by
+  // their age (by split of 25 years), to obtain a Map of split_number -> List
+  // of persons, and finally put each split number into a dedicated silo.
   def localGroups(system: SystemImpl, host: Host, silo: SiloRef[(Int, Person), TreeMap[Int, Person]]): List[SiloRef[Person, List[Person]]] = {
     // result type of groupBy: Map[Int, TreeMap[Int, Person]]
     val mapped: SiloRef[(Int, List[Person]), Map[Int, List[Person]]] =
@@ -107,8 +111,10 @@ object Demo {
     val origSiloFuts = hosts.map { host => system.fromFun(host)(() => populateSilo(numPersons)) }
     val futOrigSilos = Future.sequence(origSiloFuts)
 
+    // do a groupBy age of the persons, resulting in 4 silos, grouped by slice of 25 years
     val done = futOrigSilos.flatMap { origSilos =>
       // tree for each silo
+      // Associate person id with the person
       val treeSilos: List[SiloRef[(Int, Person), TreeMap[Int, Person]]] =
         for (silo <- origSilos) yield silo.apply[(Int, Person), TreeMap[Int, Person]] { persons =>
           var personsTree = TreeMap.empty[Int, Person]
@@ -118,20 +124,23 @@ object Demo {
           personsTree
         }
 
-      // create a group for each silo
+      // create a group for each silo. for each host, you have 4 groups
       val groups: List[List[SiloRef[Person, List[Person]]]] = for ((treeSilo, host) <- treeSilos.zip(hosts)) yield {
         localGroups(system, host, treeSilo)
       }
 
+      // Create four silos corresponding to the first two hosts
       val silos12 = for (i <- 0 until 4) yield
         system.emptySilo[Person, List[Person]](hosts(i % 2))
 
+      // Zip the group (regrouping split number together), and send to silos12 the corresponding values
       groups(0).zip(groups(1)).zipWithIndex.map {
         case ((leftSilo, rightSilo), i) =>
           leftSilo.pumpTo(silos12(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
           rightSilo.pumpTo(silos12(i))(spore { (elem: Person, emit: Emitter[Person]) => emit.emit(elem) })
       }
 
+      // Same but with hosts 3 4
       val silos34 = for (i <- 0 until 4) yield
         system.emptySilo[Person, List[Person]](hosts((i % 2) + 2))
 

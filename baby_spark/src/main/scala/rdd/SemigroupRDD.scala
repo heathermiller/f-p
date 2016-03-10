@@ -10,7 +10,7 @@ import Scalaz._
 import silt.SiloRef
 
 
-class MapSemigroupRDD[K, V : Semigroup, S <: Traversable[(K, V)] : Semigroup](override val silos: Seq[SiloRef[(K, V), S]]) extends MapRDD[K, V, S](silos) {
+class MapSemigroupRDD[K, V : Semigroup, S <: Traversable[(K, V)] : Semigroup](override val silos: Seq[SiloRef[S]]) extends MapRDD[K, V, S](silos) {
 
   def collectMap()(implicit ec: ExecutionContext): S = {
     Await.result(Future.sequence(silos.map {
