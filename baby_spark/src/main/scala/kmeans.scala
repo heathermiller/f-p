@@ -23,7 +23,7 @@ object KMeansHelper {
   val dim = 2
   val numCentroids = 5
   val partitions = 12
-  val pointsPerPartition = 5000
+  val pointsPerPartition = 10000
   val epsilon = 0.1
 
   def printMatrix(mat: Array[Array[Double]]): String = {
@@ -152,7 +152,7 @@ object KMeans {
     kMeansIterate(partitionedPoints, initCentroids, 1)
   }
 
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     val randPoints = for (_ <- 1 to partitions) yield { generatePoints (dim, pointsPerPartition, seed) }
 
     val system = new SystemImpl
