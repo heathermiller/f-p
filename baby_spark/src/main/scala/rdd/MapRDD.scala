@@ -5,6 +5,7 @@ import scala.language.higherKinds
 
 import scala.spores._
 import scala.pickling._
+import SporePickler._
 import Defaults._
 
 import scala.concurrent._

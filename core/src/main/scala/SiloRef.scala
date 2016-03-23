@@ -2,16 +2,12 @@ package silt
 
 import scala.spores._
 import scala.pickling._
-import scala.pickling.Defaults._
 
 import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
-
-import scala.collection.Traversable
 
 /** A program operating on data stored in a silo can only do so using a
  *  reference to the silo, a so-called `SiloRef`.
- *  
+ *
  *  Similar to a proxy object, a `SiloRef` represents, and allows interacting
  *  with, a silo possibly located on a remote node. For the component acquiring
  *  a `SiloRef`, the location of the silo – local or remote – is completely
@@ -36,9 +32,6 @@ trait SiloRef[T] {
   def send(): Future[T]
 
   def cache(): SiloRef[T]
-
-  // def pumpTo[R, P <: Spore2[W, Emitter[V], Unit]](destSilo: SiloRef[V, R])(fun: P)
-  //                                   (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = ???
 
   def flatMap[S](fun: Spore[T, SiloRef[S]])
                                      (implicit pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]): SiloRef[S]
@@ -67,14 +60,4 @@ class LocalSilo[T](private[silt] val value: T) {
     Future.successful(value)
   }
 
-  // def doPumpTo[A, B](existFun: Function2[A, Emitter[B], Unit], emitter: Emitter[B]): Unit = {
-  //   val fun = existFun.asInstanceOf[Function2[U, Emitter[B], Unit]]
-  //   Future {
-  //     value.foreach { elem =>
-  //       // println(s"visiting element $elem")
-  //       fun(elem, emitter)
-  //     }
-  //     emitter.done()
-  //   }
-  // }
 }

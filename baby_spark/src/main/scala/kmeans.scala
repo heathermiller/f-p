@@ -12,9 +12,10 @@ import scala.pickling._
 import Defaults._
 import SporePickler._
 
-/* Replication of http://mbrace.io/starterkit/HandsOnTutorial/examples/200-kmeans-clustering-example.html
- * using F-P
- */
+/**
+  * Replication of http://mbrace.io/starterkit/HandsOnTutorial/examples/200-kmeans-clustering-example.html
+  * using F-P
+  */
 
 object KMeansHelper {
   type Point = Array[Double]

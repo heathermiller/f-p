@@ -34,17 +34,6 @@ trait SiloSystem {
       InitSiloFun(fun, refId)
     })
 
-  // the idea is that empty silos can only be filled using pumpTos.
-  // we'll detect issues like trying to fill a silo that's been constructed
-  // *not* using pumpTo at runtime (before running the topology, though!)
-  //
-  // to push checking further to compile time, could think of
-  // using phantom types to detect whether a ref has been target of non-pumpTo!
-  // def emptySilo[T](host: Host): SiloRef[T] = {
-  //   val refId = refIds.incrementAndGet()
-  //   location += (refId -> host)
-  //   new graph.EmptySiloRef[T](refId, host)(this)
-  // }
 
   def waitUntilAllClosed(): Unit
   def waitUntilAllClosed(tm1: FiniteDuration, tm2: FiniteDuration): Unit

@@ -122,21 +122,24 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       // IDEA: same pattern for spores, again!
       val s = sender
       Future {
-        val clazz = Class.forName(fqcn)
-        println(s"SERVER: looked up $clazz")
-        val inst = clazz.newInstance()
-        println(s"SERVER: created instance $inst")
-        inst match {
-          case factory: SiloFactory[t] =>
-            val newSilo = factory.data // COMPUTE-INTENSIVE
-            promise.success(newSilo)
+        try {
+          val clazz = Class.forName(fqcn)
+          println(s"SERVER: looked up $clazz")
+          val inst = clazz.newInstance()
+          println(s"SERVER: created instance $inst")
+          inst match {
+            case factory: SiloFactory[t] =>
+              val newSilo = factory.data // COMPUTE-INTENSIVE
+              promise.success(newSilo)
 
-            println(s"SERVER: created $newSilo. responding...")
-            val replyMsg = OKCreated(refId)
-            replyMsg.id = theMsg.id
-            s ! replyMsg
-
-          case _ => /* do nothing */
+              println(s"SERVER: created $newSilo. responding...")
+              val replyMsg = OKCreated(refId)
+              replyMsg.id = theMsg.id
+              s ! replyMsg
+            case _ => println(s"Can't do anything, type of inst is ${inst.getClass}")
+          }
+        } catch {
+          case e: Exception => s ! ForceError(e)
         }
       }
 
