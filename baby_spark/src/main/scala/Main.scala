@@ -127,8 +127,8 @@ object Main {
 
     val host = Host("127.0.0.1", 8090)
 
-    // val done = flatMapEx(system, host)
-    val done = flatMapPaperEx(system, host)
+    val done = flatMapEx(system, host)
+    // val done = flatMapPaperEx(system, host)
 
     val res = Await.result(done, 60.seconds)
     println(s"Result: ${res.take(30)}")

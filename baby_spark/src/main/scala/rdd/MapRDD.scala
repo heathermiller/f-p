@@ -12,9 +12,10 @@ import scala.concurrent._
 
 import silt._
 
-
-class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[S]])
-    extends RDD[(K, V), S](silos) {
+class MapRDD[K, V, S <: Traversable[(K, V)]]
+  (override val silos: Seq[SiloRef[S]],
+  override val hosts: Seq[Host])
+    extends RDD[(K, V), S](silos, hosts) {
 
   def reduceByKey[RS[A, B] <: Traversable[(A, B)]](f: Spore2[V, V, V])
     (implicit cbf1: CanBuildTo[(K, V), RS[K, V]]): MapRDD[K, V, RS[K, V]] = {
@@ -30,7 +31,7 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[S]]
         }
       })
     }
-    new MapRDD(resList)
+    new MapRDD(resList, hosts)
   }
 
   // IS: Traversable type used to store the value for one key
@@ -48,7 +49,7 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[S]]
         }
       })
     }
-    new MapRDD[K, IS[V], RS[K, IS[V]]](resList)
+    new MapRDD[K, IS[V], RS[K, IS[V]]](resList, hosts)
   }
 
   def mapValues[W, RS <: Traversable[(K, W)]](f: Spore[V, W])
@@ -66,35 +67,46 @@ class MapRDD[K, V, S <: Traversable[(K, V)]](override val silos: Seq[SiloRef[S]]
 
     val rdd1 = groupByKey[IS, RS]()
     val rdd2 = other.groupByKey[IS, RS]()
-    new MapRDD(rdd1.silos ++ rdd2.silos)
+    new MapRDD(rdd1.silos ++ rdd2.silos, hosts)
   }
 
   def join[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, W))]]
     (other: MapRDD[K, W, S2])
     (implicit ec: ExecutionContext,
-      cbf1: CanBuildTo[(K, (V, W)), FS],
-      cbf2: CanBuildTo[(K, W), S2]): MapRDD[K, Tuple2[V, W], FS] = {
+      cbf: CanBuildTo[(K, (V, W)), FS]): MapRDD[K, Tuple2[V, W], FS] = {
 
-    flatMap[(K, Tuple2[V, W]), FS](spore {
-      val rdd = other
-      val lcbf1 = cbf1
-      val lcbf2 = cbf2
-      val lec = ec
-      c1 => {
-        val k1 = c1._1
-        val v1 = c1._2
-        val res0 = rdd.filter(spore {
-          val lk1 = k1
-          c2 => c2._1 == lk1
-        })(lcbf2)
-        val res1 = res0.map(spore {
-          val lv1 = v1
-          c2 => (c2._1, (lv1, c2._2))
-        })(lcbf1)
-        res1.collect()(lec)
-      }
-    })
+    val othersSilo = other.silos
+
+    def joinSilos
+      (silo1: SiloRef[S], silo2: SiloRef[S2], cbf: CanBuildTo[(K, (V, W)), FS]): SiloRef[FS] = {
+
+      silo1.flatMap(spore {
+        val lsl2 = silo2
+        val lcbf1 = cbf
+        sl1 => {
+          lsl2.apply(spore {
+            val lsl1 = sl1
+            val lcbf2 = lcbf1
+            sl2 => {
+              lsl1.flatMap { e1 =>
+                sl2.flatMap {
+                  e2 => if (e1._1 == e2._1) List((e1._1, e1._2 -> e2._2)) else Nil
+                }
+              }(collection.breakOut(lcbf2))
+            }
+          })
+        }
+      })
+    }
+
+    val res = silos.flatMap(s1 =>
+      othersSilo.map(s2 =>
+        joinSilos(s1, s2, cbf)
+      )
+    )
+
+    new MapRDD(res, hosts)
   }
 
-  def union(other: MapRDD[K, V, S]): MapRDD[K, V, S] = new MapRDD(silos ++ other.silos)
+  def union(other: MapRDD[K, V, S]): MapRDD[K, V, S] = new MapRDD(silos ++ other.silos, hosts)
 }

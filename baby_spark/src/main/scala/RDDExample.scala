@@ -5,7 +5,7 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import scala.collection.immutable.TreeMap
+import scala.collection.immutable.{TreeMap, Map}
 
 import scalaz._
 import Scalaz._
@@ -49,6 +49,8 @@ object RDDExample {
     val lorem = Await.result(RDD.fromTextFile("data/lorem.txt", hosts(1)), Duration.Inf)
     val lorem2 = Await.result(RDD.fromTextFile("data/lorem.txt", hosts(2)), Duration.Inf)
 
+    println("Got the content, join..")
+
     val contentWord = content.flatMap(line => {
       line.split(' ').toList
     }).map(word => (word.length, word))
@@ -57,11 +59,12 @@ object RDDExample {
       line.split(' ').toList
     }).map(word => (word.length, word))
 
-    val loremWord2 = lorem2.flatMap(line => {
-      line.split(' ').toList
-    }).map(word => (word.length, word)).groupByKey[Set, TreeMap]()
+    // val loremWord2 = lorem2.flatMap(line => {
+    //   line.split(' ').toList
+    // }).map(word => (word.length, word)).groupByKey[Set, TreeMap]()
 
-    val res = contentWord.join[Set, TreeMap](loremWord).union(loremWord2).collectMap()
+    val res = contentWord.join[Set, Map](loremWord).collectMap()
+    // val res = contentWord.join[Set, TreeMap](loremWord).union(loremWord2).collectMap()
 
     println(s"Result... ${res}")
   }
@@ -185,7 +188,7 @@ object RDDExample {
 
     // println("Running examples")
     // externalDependencyExample(system)
-    testCache(system, hosts)
+    joinExample(system, hosts)
 
     system.waitUntilAllClosed(30.seconds, 30.seconds)
   }

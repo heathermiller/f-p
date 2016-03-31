@@ -1,6 +1,6 @@
-package baby_spark
-package rdd
+package baby_spark.rdd
 
+import java.lang.System
 import scala.language.implicitConversions
 
 import scala.collection.immutable.TreeMap
@@ -24,11 +24,14 @@ import silt._
 
 
 object RDD {
-  def apply[T, S <: Traversable[T]](silos: SiloRef[S]): RDD[T, S] =
-    new RDD(List(silos))
+  def apply[T, S <: Traversable[T]](silo: SiloRef[S]): RDD[T, S] =
+    RDD(List(silo), Seq(silo.host))
 
   def apply[T, S <: Traversable[T]](silos: Seq[SiloRef[S]]): RDD[T, S] =
-    new RDD(silos)
+    RDD(silos, silos.map(_.host))
+
+  def apply[T, S <: Traversable[T]](silos: Seq[SiloRef[S]], hosts: Seq[Host]): RDD[T, S] =
+    new RDD(silos, hosts)
 
   // Future isn't needed if instead the creation of a Silo returns a SiloRef directly
   def fromTextFile(filename: String, host: Host)(implicit system: SiloSystem, ec: ExecutionContext): Future[RDD[String, List[String]]] = {
@@ -42,15 +45,15 @@ object RDD {
   }
 
   implicit def mapRDD[K, V, S <: Traversable[(K, V)]](rdd: RDD[(K, V), S]): MapRDD[K, V, S] = {
-    new MapRDD[K, V, S](rdd.silos)
+    new MapRDD[K, V, S](rdd.silos, rdd.hosts)
   }
 
   implicit def semigroup[K, V : Semigroup, S <: Traversable[(K, V)]: Semigroup](rdd: MapRDD[K, V, S]): MapSemigroupRDD[K, V, S] =
-    new MapSemigroupRDD(rdd.silos)
+    new MapSemigroupRDD(rdd.silos, rdd.hosts)
 
 }
 
-class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[S]]) {
+class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[S]], val hosts: Seq[Host]) {
 
   // Trick from https://stackoverflow.com/questions/3225675/can-i-pimp-my-library-with-an-analogue-of-traversablelike-map-that-has-nicely
   // Note
@@ -106,7 +109,7 @@ class RDD[T, S <: Traversable[T]] private[rdd] (val silos: Seq[SiloRef[S]]) {
         }
       })
     }
-    new MapRDD[K, IS, RS](resList)
+    new MapRDD[K, IS, RS](resList, hosts)
   }
 
   def flatMap[B, V <: Traversable[B]](f: Spore[T, Seq[B]])(implicit cbt1: CanBuildTo[B, V]): RDD[B, V] = {

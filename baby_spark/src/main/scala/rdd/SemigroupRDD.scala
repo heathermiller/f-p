@@ -6,11 +6,10 @@ import scala.concurrent.duration.Duration
 
 import scalaz._
 import Scalaz._
+import silt.{ Host, SiloRef }
 
-import silt.SiloRef
 
-
-class MapSemigroupRDD[K, V : Semigroup, S <: Traversable[(K, V)] : Semigroup](override val silos: Seq[SiloRef[S]]) extends MapRDD[K, V, S](silos) {
+class MapSemigroupRDD[K, V : Semigroup, S <: Traversable[(K, V)] : Semigroup](override val silos: Seq[SiloRef[S]], override val hosts: Seq[Host]) extends MapRDD[K, V, S](silos, hosts) {
 
   def collectMap()(implicit ec: ExecutionContext): S = {
     Await.result(Future.sequence(silos.map {
