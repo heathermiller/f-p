@@ -13,6 +13,11 @@ import scala.pickling._
 import Defaults._
 import SporePickler._
 
+/**
+  * Taken and replicated from
+  * http://mbrace.io/starterkit/HandsOnTutorial/examples/200-knn-digit-recognizer-example.html
+  */
+
 object Image {
   def parse(path: String): Vector[Image] = {
     Source.fromFile(path)
