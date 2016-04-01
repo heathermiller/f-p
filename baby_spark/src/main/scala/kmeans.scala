@@ -110,8 +110,6 @@ object KMeans {
       }).send()
     })
 
-    val dim = centroids(0).length
-
     val newCentroids = Await.result(Future.sequence(clusterParts).map(seq => {
       seq
         .reduce(_ ++ _)

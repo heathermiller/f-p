@@ -24,9 +24,6 @@ import silt._
 
 
 object RDD {
-  def apply[T, S <: Traversable[T]](silo: SiloRef[S]): RDD[T, S] =
-    RDD(List(silo), Seq(silo.host))
-
   def apply[T, S <: Traversable[T]](silos: Seq[SiloRef[S]]): RDD[T, S] =
     RDD(silos, silos.map(_.host))
 
@@ -41,7 +38,7 @@ object RDD {
         val lines = Source.fromFile(fl).mkString.split('\n').toList
         new LocalSilo[List[String]](lines)
       }
-    }).map { RDD(_) }
+    }).map { x => RDD(List(x)) }
   }
 
   implicit def mapRDD[K, V, S <: Traversable[(K, V)]](rdd: RDD[(K, V), S]): MapRDD[K, V, S] = {

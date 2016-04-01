@@ -6,6 +6,7 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.collection.immutable.{TreeMap, Map}
+import scala.io.Source
 
 import scalaz._
 import Scalaz._
@@ -27,6 +28,7 @@ object RDDExample {
   implicit def TreeMapSemigroup[K, V : Semigroup]
     (implicit ordering: scala.Ordering[K]): Semigroup[TreeMap[K, V]] =
     new Semigroup[TreeMap[K, V]] with std.MapInstances with std.MapFunctions {
+
     def zero = new TreeMap[K, V]()(ordering)
     // Repetition of scalaz.std.Map: method apppend defined in mapMonoid
     override def append(m1: TreeMap[K, V], m2: => TreeMap[K, V]): TreeMap[K, V] = {
@@ -41,6 +43,41 @@ object RDDExample {
         case (to, (k, v)) => to.updated(k, to.get(k).map(semigroup(_, v)).getOrElse(v))
       }
     }
+  }
+
+  def multiSiloRDD(system: SystemImpl, hosts: Seq[Host], n: Int): Unit = {
+    assert(hosts.length >= n)
+
+    def initSilo(): Seq[SiloRef[List[String]]] = {
+      val silosFutures = hosts.take(n).zipWithIndex.map{ case (h, i) => {
+        system.fromFun(h)(spore {
+          val index = i + 1
+          _: Unit => {
+            val lines = Source.fromFile(s"data/lorem${index}.txt").mkString.split('\n').toList
+            new LocalSilo[List[String]](lines)
+          }
+        })
+      }}
+      Await.result(Future.sequence(silosFutures), 10.seconds)
+    }
+
+    val silos = initSilo().splitAt(n / 2)
+    val rdd1 = RDD[String, List[String]](silos._1)
+    val rdd2 = RDD[String, List[String]](silos._2)
+
+    def splitWords(rdd: RDD[String, List[String]]): RDD[(Int, String), List[(Int, String)]] =
+    {
+      rdd.flatMap(line => {
+        line.split(' ').toList
+      }).map(word => (word.length, word))
+    }
+
+    val res1 = splitWords(rdd1)
+    val res2 = splitWords(rdd2)
+
+    val res = res1.join[Set, Map](res2).collectMap()
+
+    println(s"Result.. ${res}")
   }
 
   def joinExample(system: SystemImpl, hosts: Seq[Host]): Unit = {
@@ -180,7 +217,7 @@ object RDDExample {
 
   def main(args: Array[String]): Unit = {
     implicit val system = new SystemImpl
-    val nActors = 3
+    val nActors = 5
     val started = system.start(nActors)
     val hosts = for (i <- 0 to nActors) yield { Host("127.0.0.1", 8090 + i)}
 
@@ -188,7 +225,7 @@ object RDDExample {
 
     // println("Running examples")
     // externalDependencyExample(system)
-    joinExample(system, hosts)
+    multiSiloRDD(system, hosts, 2)
 
     system.waitUntilAllClosed(30.seconds, 30.seconds)
   }

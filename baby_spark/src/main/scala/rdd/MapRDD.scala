@@ -99,11 +99,42 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
       })
     }
 
-    val res = silos.flatMap(s1 =>
-      othersSilo.map(s2 =>
+    def mergeSilos(receiverSilo: SiloRef[FS], restSilo: Seq[SiloRef[FS]], cbf: CanBuildTo[(K, (V, W)), FS]):
+        SiloRef[FS] = {
+      def innerMerge(silo1: SiloRef[FS], silo2: SiloRef[FS], cbf: CanBuildTo[(K,
+        (V, W)), FS]): SiloRef[FS] = {
+
+        silo2.flatMap(spore {
+          val ls1 = silo1
+          val lcbf = cbf
+          s2 => {
+            ls1.apply(spore {
+              val ls2 = s2
+              val llcbf = lcbf
+              s1 => {
+                val builder = llcbf()
+                builder ++= s1
+                builder ++= ls2
+                builder.result()
+              }
+            })
+          }
+        })
+      }
+
+      restSilo.fold(receiverSilo) {
+        (currentSilo, otherSilo) => innerMerge(currentSilo, otherSilo, cbf)
+      }
+    }
+
+    val res = silos.map(s1 => {
+      val joined = othersSilo.map(s2 =>
+        // XXX: Probably inneficient: invert the argument in join, or at leat
+        //the way it's joined
         joinSilos(s1, s2, cbf)
       )
-    )
+      mergeSilos(joined.head, joined.tail, cbf)
+    })
 
     new MapRDD(res, hosts)
   }
