@@ -12,10 +12,18 @@ import scala.concurrent._
 
 import silt._
 
+object MapRDD {
+  def apply[K, V, S <: Traversable[(K, V)]](silos: Seq[SiloRef[S]], hosts:
+      Seq[Host]): MapRDD[K, V, S] = {
+    new MapRDD(silos, hosts, new NullPartitionner(silos))
+  }
+}
+
 class MapRDD[K, V, S <: Traversable[(K, V)]]
   (override val silos: Seq[SiloRef[S]],
-  override val hosts: Seq[Host])
-    extends RDD[(K, V), S](silos, hosts) {
+    override val hosts: Seq[Host],
+  override val partitionner: Partitionner[_, (K, V), S])
+    extends RDD[(K, V), S](silos, hosts, partitionner) {
 
   def reduceByKey[RS[A, B] <: Traversable[(A, B)]](f: Spore2[V, V, V])
     (implicit cbf1: CanBuildTo[(K, V), RS[K, V]]): MapRDD[K, V, RS[K, V]] = {
@@ -31,7 +39,7 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
         }
       })
     }
-    new MapRDD(resList, hosts)
+    MapRDD(resList, hosts)
   }
 
   // IS: Traversable type used to store the value for one key
@@ -49,7 +57,7 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
         }
       })
     }
-    new MapRDD[K, IS[V], RS[K, IS[V]]](resList, hosts)
+    MapRDD[K, IS[V], RS[K, IS[V]]](resList, hosts)
   }
 
   def mapValues[W, RS <: Traversable[(K, W)]](f: Spore[V, W])
@@ -67,7 +75,7 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
 
     val rdd1 = groupByKey[IS, RS]()
     val rdd2 = other.groupByKey[IS, RS]()
-    new MapRDD(rdd1.silos ++ rdd2.silos, hosts)
+    MapRDD(rdd1.silos ++ rdd2.silos, hosts)
   }
 
   def join[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, W))]]
@@ -136,8 +144,8 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
       mergeSilos(joined.head, joined.tail, cbf)
     })
 
-    new MapRDD(res, hosts)
+    MapRDD(res, hosts)
   }
 
-  def union(other: MapRDD[K, V, S]): MapRDD[K, V, S] = new MapRDD(silos ++ other.silos, hosts)
+  def union(other: MapRDD[K, V, S]): MapRDD[K, V, S] = MapRDD(silos ++ other.silos, hosts)
 }
