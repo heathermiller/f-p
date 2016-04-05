@@ -17,21 +17,32 @@ import SporePickler._
 
 import scala.io.Source
 
-import scalaz._
-import Scalaz._
-
 import silt._
 
 
 object RDD {
-  def apply[T, S <: Traversable[T]](silos: Seq[SiloRef[S]]): RDD[T, S] =
-    RDD(silos, silos.map(_.host))
+  // Trick from https://stackoverflow.com/questions/3225675/can-i-pimp-my-library-with-an-analogue-of-traversablelike-map-that-has-nicely
+  type CanBuildTo[Elem, C] = CanBuildFrom[Nothing, Elem, C]
 
-  def apply[T, S <: Traversable[T]](silos: Seq[SiloRef[S]], hosts: Seq[Host]): RDD[T, S] =
-    new RDD(silos, hosts, new NullPartitionner(silos))
+  def apply[T, S <: Traversable[T]](silos: Seq[SiloRef[S]]): RDD[T, S] =
+    RDD(silos, None)
+
+  def apply[T, S <: Traversable[T], A]
+    (silos: Seq[SiloRef[S]], partitioner: Option[Partitioner[A]]): RDD[T, S] =
+    RDD(silos, silos.map(_.host), partitioner)
+
+  def apply[T, S <: Traversable[T], A](silos: Seq[SiloRef[S]], hosts: Seq[Host],
+    partitioner: Option[Partitioner[A]]): RDD[T, S] = {
+      val lPartitioner = partitioner
+      new RDD[T, S](silos, hosts){
+        type P = A
+        override val partitioner = lPartitioner
+      }
+    }
 
   // Future isn't needed if instead the creation of a Silo returns a SiloRef directly
-  def fromTextFile(filename: String, host: Host)(implicit system: SiloSystem, ec: ExecutionContext): Future[RDD[String, List[String]]] = {
+  def fromTextFile(filename: String, host: Host)(implicit system: SiloSystem,
+    ec: ExecutionContext): Future[RDD[String, List[String]]] = {
     system.fromFun(host)(spore {
       val fl = filename
       _: Unit => {
@@ -41,24 +52,64 @@ object RDD {
     }).map { x => RDD(List(x)) }
   }
 
-  implicit def mapRDD[K, V, S <: Traversable[(K, V)]](rdd: RDD[(K, V), S]): MapRDD[K, V, S] = {
-    MapRDD[K, V, S](rdd.silos, rdd.hosts)
+  def partition[T, S <: Traversable[T]](silos: Seq[SiloRef[S]])(partitioner:
+      Partitioner[T])
+    (implicit cbf: CanBuildTo[T, S]):
+      Seq[SiloRef[S]] = {
+
+    def shuffleSilo(silo1: SiloRef[S], silo2: SiloRef[S], partition: Int): SiloRef[S] = {
+
+      def partF(x: T): Boolean = partitioner.getPartition(x) == partition
+
+      silo2.flatMap(spore {
+        val ls1 = silo1
+        val lPartF = partF _
+        val lcbf = cbf
+        s2 => {
+          ls1.apply(spore {
+            val ls2 = s2.filter(lPartF(_))
+            val llPartF = lPartF
+            val llcbf = lcbf
+            s1 => {
+              val builder = llcbf()
+              builder ++= s1.filter(llPartF)
+              builder ++= ls2
+              builder.result()
+            }
+          })
+        }
+      })
+    }
+
+    val newSilos = silos.zipWithIndex.map { case (s1, index) =>
+      silos.filter(_ != s1).fold(s1) {
+        (currentSilo, otherSilo) => shuffleSilo(currentSilo, otherSilo, index)
+      }
+    }
+
+    newSilos
   }
 
-  implicit def semigroup[K, V : Semigroup, S <: Traversable[(K, V)]: Semigroup](rdd: MapRDD[K, V, S]): MapSemigroupRDD[K, V, S] =
-    MapSemigroupRDD(rdd.silos, rdd.hosts)
-
+  implicit def mapRDD[K, V, S <: Traversable[(K, V)]](rdd: RDD[(K, V), S]): MapRDD[K, V, S] = {
+    new MapRDD[K, V, S](rdd.silos, rdd.hosts){
+      type P = rdd.P
+      override val partitioner = rdd.partitioner
+    }
+  }
 }
 
 class RDD[T, S <: Traversable[T]] private[rdd](
   val silos: Seq[SiloRef[S]],
-  val hosts: Seq[Host],
-  val partitionner: Partitionner[_, T, S]) {
+  val hosts: Seq[Host]) {
 
-  // Trick from https://stackoverflow.com/questions/3225675/can-i-pimp-my-library-with-an-analogue-of-traversablelike-map-that-has-nicely
-  type CanBuildTo[Elem, C] = CanBuildFrom[Nothing, Elem, C]
+  import RDD._
 
-  def map[B, V <: Traversable[B]](f: Spore[T, B])(implicit cbt: CanBuildTo[B, V]): RDD[B, V] = {
+  type P
+
+  val partitioner: Option[Partitioner[P]] = None
+
+  def map[B, V <: Traversable[B]](f: Spore[T, B])(implicit cbt: CanBuildTo[B,
+    V]): RDD[B, V] = {
     RDD(silos.map {
       s => s.apply[V](spore {
         val localFunc = f
@@ -70,7 +121,8 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     })
   }
 
-  def filter(f: Spore[T, Boolean])(implicit cbf: CanBuildTo[T, S]): RDD[T, S] = {
+  def filter(f: Spore[T, Boolean])(implicit cbf: RDD.CanBuildTo[T, S]): RDD[T,
+    S] = {
     val resList = silos.map {
       s => s.apply[S](spore {
         val lf = f
@@ -86,10 +138,13 @@ class RDD[T, S <: Traversable[T]] private[rdd](
         }
       })
     }
-    RDD(resList)
+    RDD(resList, partitioner)
   }
 
-  def groupBy[K, IS <: Traversable[T], RS <: Traversable[(K, IS)]](f: Spore[T, K])(implicit cbf1: CanBuildTo[T, IS], cbf2: CanBuildTo[(K, IS), RS]): MapRDD[K, IS, RS] = {
+  def groupBy[K, IS <: Traversable[T], RS <: Traversable[(K, IS)]](f: Spore[T,
+    K])
+    (implicit cbf1: CanBuildTo[T, IS],
+      cbf2: CanBuildTo[(K, IS), RS]): MapRDD[K, IS, RS] = {
     val resList = silos.map {
       s => s.apply[RS](spore {
         val lf = f
@@ -111,7 +166,8 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     MapRDD[K, IS, RS](resList, hosts)
   }
 
-  def flatMap[B, V <: Traversable[B]](f: Spore[T, Seq[B]])(implicit cbt1: CanBuildTo[B, V]): RDD[B, V] = {
+  def flatMap[B, V <: Traversable[B]](f: Spore[T, Seq[B]])(implicit cbt1:
+    CanBuildTo[B, V]): RDD[B, V] = {
     val resList = silos.map {
       s => s.apply[V](spore {
         val func = f
@@ -124,7 +180,8 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     RDD(resList)
   }
 
-  def union(other : RDD[T, S]): RDD[T, S] = RDD(silos ++ other.silos)
+  // TODO: handle the various case with the partitioner
+  def union[B](other : RDD[T, S]): RDD[T, S] = RDD(silos ++ other.silos)
 
   def reduce(f: Spore2[T, T, T])(implicit ec: ExecutionContext): T = {
     val resList = silos.map {
@@ -140,10 +197,13 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     res1.reduce(f)
   }
 
-  def collect()(implicit ec: ExecutionContext): Seq[T] = {
+  def collect()(implicit ec: ExecutionContext, cbf: CanBuildTo[T, S]): S = {
     Await.result(Future.sequence(silos.map {
       s => s.send()
-    }), Duration.Inf).flatten
+    }), Duration.Inf).foldLeft(cbf())((builder, elem) => {
+      builder ++= elem
+      builder
+    }).result()
   }
 
   def count()(implicit ec: ExecutionContext): Long = {
@@ -156,4 +216,9 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     val res1 = Await.result(res, Duration.Inf).flatten
     res1.reduce(_ + _)
   }
+
+  def partition(partitioner: Partitioner[T])(implicit cbf: CanBuildTo[T, S]):
+      RDD[T, S] = {
+    RDD(RDD.partition[T, S](silos)(partitioner), hosts, Some(partitioner))
+    }
 }

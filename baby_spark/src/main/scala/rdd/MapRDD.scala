@@ -13,17 +13,27 @@ import scala.concurrent._
 import silt._
 
 object MapRDD {
+  def apply[K, V, S <: Traversable[(K, V)], A](silos: Seq[SiloRef[S]], hosts:
+      Seq[Host], partitioner: Option[Partitioner[A]]): MapRDD[K, V, S] = {
+    val localPartitioner = partitioner
+    new MapRDD[K, V, S](silos, hosts){
+      type P = A
+      override val partitioner = localPartitioner
+    }
+  }
+
   def apply[K, V, S <: Traversable[(K, V)]](silos: Seq[SiloRef[S]], hosts:
-      Seq[Host]): MapRDD[K, V, S] = {
-    new MapRDD(silos, hosts, new NullPartitionner(silos))
+  Seq[Host]): MapRDD[K, V, S] = {
+    new MapRDD(silos, hosts)
   }
 }
 
 class MapRDD[K, V, S <: Traversable[(K, V)]]
   (override val silos: Seq[SiloRef[S]],
-    override val hosts: Seq[Host],
-  override val partitionner: Partitionner[_, (K, V), S])
-    extends RDD[(K, V), S](silos, hosts, partitionner) {
+    override val hosts: Seq[Host])
+    extends RDD[(K, V), S](silos, hosts) {
+
+  import RDD._
 
   def reduceByKey[RS[A, B] <: Traversable[(A, B)]](f: Spore2[V, V, V])
     (implicit cbf1: CanBuildTo[(K, V), RS[K, V]]): MapRDD[K, V, RS[K, V]] = {
@@ -45,7 +55,8 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
   // IS: Traversable type used to store the value for one key
   // RS: Traversable type used to store the mapping key/value
   def groupByKey[IS[A] <: Traversable[A], RS[A, B] <: Traversable[(A, B)]]()
-    (implicit cbf1: CanBuildTo[(K, IS[V]), RS[K, IS[V]]], cbf2: CanBuildTo[V, IS[V]]): MapRDD[K, IS[V], RS[K, IS[V]]] = {
+    (implicit cbf1: CanBuildTo[(K, IS[V]), RS[K, IS[V]]],
+      cbf2: CanBuildTo[V, IS[V]]): MapRDD[K, IS[V], RS[K, IS[V]]] = {
     val resList = silos.map {
       s => s.apply[RS[K, IS[V]]](spore {
         val lcbf = cbf1
@@ -62,20 +73,54 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
 
   def mapValues[W, RS <: Traversable[(K, W)]](f: Spore[V, W])
     (implicit cbt: CanBuildTo[(K, W), RS]): MapRDD[K, W, RS] = {
-    map[(K, W), RS](spore {
+    val silos = map[(K, W), RS](spore {
       val lf = f
       e => (e._1, lf(e._2))
-    })
+    }).silos
+
+    val self = this
+    new MapRDD[K, W, RS](silos, hosts){
+      type P = self.P
+      override val partitioner = self.partitioner
+    }
   }
 
-  def join[IS[A] <: Traversable[A], RS[A, B] <: Traversable[(A, B)]]
-    (other: MapRDD[K, V, S])
-    (implicit cbf1: CanBuildTo[(K, IS[V]), RS[K, IS[V]]],
-      cbf2: CanBuildTo[V, IS[V]]): MapRDD[K, IS[V], RS[K, IS[V]]] = {
+  def combine[X, IS[A] <: Traversable[A], RS[A, B] <: Traversable[(A, B)]]()(
+    implicit ev: V =:= (X, X),
+    cbf: CanBuildTo[(K, V), S],
+    cbf1: CanBuildTo[X, IS[X]],
+    cbf2: CanBuildTo[(K, IS[X]), RS[K, IS[X]]]): MapRDD[K, IS[X], RS[K, IS[X]]] = {
 
-    val rdd1 = groupByKey[IS, RS]()
-    val rdd2 = other.groupByKey[IS, RS]()
-    MapRDD(rdd1.silos ++ rdd2.silos, hosts)
+    partitioner match {
+      case None => {
+        val keyPartitioner = new ProxyPartitioner((tup: (K, V)) => tup._1, new HashPartitioner(hosts.length))
+        val newSilos = RDD.partition[(K, V), S](silos)(keyPartitioner)
+        MapRDD[K, V, S, (K, V)](silos, hosts, Some(keyPartitioner)).combine()
+      }
+
+      case Some(_) => {
+        val combineSilos = silos.map { s => {
+          s.apply(spore {
+            val lcbf1 = cbf1
+            val lcbf2 = cbf2
+            val lev = ev
+            content => {
+              val map = content.flatMap({ case (key, v) => {
+                val value = lev(v)
+                List((key, value._1), (key, value._2))
+              }})
+              val grouped = map.groupBy(_._1)
+              val res = grouped.map({ case (key, v) => {
+                (key, v.map(e => e._2)(collection.breakOut(lcbf1)))
+              }})(collection.breakOut(lcbf2))
+              res
+            }
+          })
+        }}
+
+        MapRDD(combineSilos, hosts, partitioner)
+      }
+    }
   }
 
   def join[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, W))]]
@@ -88,17 +133,17 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
     def joinSilos
       (silo1: SiloRef[S], silo2: SiloRef[S2], cbf: CanBuildTo[(K, (V, W)), FS]): SiloRef[FS] = {
 
-      silo1.flatMap(spore {
-        val lsl2 = silo2
+      silo2.flatMap(spore {
+        val lsl1 = silo1
         val lcbf1 = cbf
-        sl1 => {
-          lsl2.apply(spore {
-            val lsl1 = sl1
+        sl2 => {
+          lsl1.apply(spore {
+            val lsl2 = sl2
             val lcbf2 = lcbf1
-            sl2 => {
-              lsl1.flatMap { e1 =>
-                sl2.flatMap {
-                  e2 => if (e1._1 == e2._1) List((e1._1, e1._2 -> e2._2)) else Nil
+            sl1 => {
+              lsl2.flatMap { e1 =>
+                sl1.flatMap {
+                  e2 => if (e1._1 == e2._1) List((e1._1, e2._2 -> e1._2)) else Nil
                 }
               }(collection.breakOut(lcbf2))
             }
@@ -135,17 +180,22 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
       }
     }
 
-    val res = silos.map(s1 => {
-      val joined = othersSilo.map(s2 =>
-        // XXX: Probably inneficient: invert the argument in join, or at leat
-        //the way it's joined
-        joinSilos(s1, s2, cbf)
-      )
-      mergeSilos(joined.head, joined.tail, cbf)
-    })
+    val res = (partitioner, other.partitioner) match {
+      case (Some(p1), Some(p2)) if p1 == p2 => {
+        silos.zip(othersSilo).map({ case (s1, s2) => joinSilos(s1, s2, cbf) })
+      }
+      case _ => {
+        silos.map(s1 => {
+        val joined = othersSilo.map(s2 =>
+          joinSilos(s1, s2, cbf)
+        )
+        mergeSilos(joined.head, joined.tail, cbf)
+      })}
+    }
 
     MapRDD(res, hosts)
   }
 
+  // TODO: handle the union properly
   def union(other: MapRDD[K, V, S]): MapRDD[K, V, S] = MapRDD(silos ++ other.silos, hosts)
 }

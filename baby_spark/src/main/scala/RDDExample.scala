@@ -75,9 +75,9 @@ object RDDExample {
     val res1 = splitWords(rdd1)
     val res2 = splitWords(rdd2)
 
-    val res = res1.join[Set, Map](res2).collectMap()
+    // val res = res1.join(res2).collectMap()
 
-    println(s"Result.. ${res}")
+    // println(s"Result.. ${res}")
   }
 
   def joinExample(system: SystemImpl, hosts: Seq[Host]): Unit = {
@@ -88,19 +88,21 @@ object RDDExample {
 
     println("Got the content, join..")
 
+    val partitioner = new ProxyPartitioner((tup: (Int, String)) => tup._1, new HashPartitioner(2))
+
     val contentWord = content.flatMap(line => {
       line.split(' ').toList
-    }).map(word => (word.length, word))
+    }).map(word => (word.length, word)).partition(partitioner)
 
     val loremWord = lorem.flatMap(line => {
       line.split(' ').toList
-    }).map(word => (word.length, word))
+    }).map(word => (word.length, word)).partition(partitioner)
 
     // val loremWord2 = lorem2.flatMap(line => {
     //   line.split(' ').toList
     // }).map(word => (word.length, word)).groupByKey[Set, TreeMap]()
 
-    val res = contentWord.join[Set, Map](loremWord).collectMap()
+    val res = contentWord.join(loremWord).combine[String, Set, Map]().collect()
     // val res = contentWord.join[Set, TreeMap](loremWord).union(loremWord2).collectMap()
 
     println(s"Result... ${res}")
@@ -225,7 +227,7 @@ object RDDExample {
 
     // println("Running examples")
     // externalDependencyExample(system)
-    multiSiloRDD(system, hosts, 2)
+    joinExample(system, hosts)
 
     system.waitUntilAllClosed(30.seconds, 30.seconds)
   }
