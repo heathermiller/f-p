@@ -22,6 +22,8 @@ import com.typesafe.config.ConfigFactory
 
 import silt._
 import silt.actors._
+import silt.graph.{ Apply, ApplySiloRef, FMapped, FMappedSiloRef, Materialized, Node, ProxySiloRef }
+
 
 object RDDExample {
 
@@ -80,6 +82,68 @@ object RDDExample {
     // println(s"Result.. ${res}")
   }
 
+  def lineageTest(system: SystemImpl, hosts: Seq[Host]): Unit = {
+    implicit val sm = system
+    val content = Await.result(RDD.fromTextFile("data/data.txt", hosts.take(2)), Duration.Inf)
+    val lorem = Await.result(RDD.fromTextFile("data/lorem.txt", hosts.take(2)), Duration.Inf)
+
+    val contentWord = content.flatMap(line => {
+      line.split(' ').toList
+    }).map(word => (word.length, word))
+
+    val loremWord = lorem.flatMap(line => {
+      line.split(' ').toList
+    }).map(word => (word.length, word))
+
+    val res = contentWord.fullJoin(loremWord).silos
+    printLineage(res(0))
+    printLineage(res(1))
+  }
+
+  case class Tree[T](val data: T, left: Option[Tree[T]], right: Option[Tree[T]])
+
+  def printLineage[T](sl: SiloRef[T]): Unit = {
+    def print0(n: Node): Tree[Node] = {
+      n match {
+        case m : Materialized => Tree(m, None, None)
+        case ap: Apply[t, s] => {
+          val prev = Some(print0(ap.input))
+          val fEnv = ap.fun.asInstanceOf[SporeWithEnv[t, s]]
+          val right = None
+          Tree(ap, prev, right)
+        }
+        case fm: FMapped[t, s] => {
+          val prev = Some(print0(fm.input))
+          val fEnv = fm.fun.asInstanceOf[SporeWithEnv[t, s]]
+          val right = None
+          Tree(fm, prev, right)
+        }
+      }
+    }
+    val res = print0(sl.asInstanceOf[ProxySiloRef[T]].node())
+
+    def prettyPrint(tree: Tree[Node]): Unit = {
+      print(s"Node:")
+      tree.data match {
+        case _: FMapped[_, _] => println(s"Flatmap@${tree.data.refId}")
+        case _: Apply[_, _] => println(s"Apply@${tree.data.refId}")
+        case _: Materialized => println(s"Materialied@${tree.data.refId}")
+      }
+      tree.left.map( e => {
+        println("Going left")
+        prettyPrint(e)
+      })
+      tree.right.map( e => {
+        println("Going right")
+        prettyPrint(e)
+      })
+      println("-----")
+    }
+
+    prettyPrint(res)
+  }
+
+
   def joinExample(system: SystemImpl, hosts: Seq[Host]): Unit = {
     implicit val sm = system
     val content = Await.result(RDD.fromTextFile("data/data.txt", hosts(0)), Duration.Inf)
@@ -108,7 +172,45 @@ object RDDExample {
       .mapValues(_.flatten)
       .collect()
 
-    println(s"Result... ${res}")
+    println(s"Result: ${res}")
+  }
+
+  def testPartition(system: SystemImpl, hosts: Seq[Host]): Unit = {
+    implicit val sm = system
+    val content = Await.result(RDD.fromTextFile("data/data.txt", hosts.take(2)), Duration.Inf)
+    val lorem = Await.result(RDD.fromTextFile("data/lorem.txt", hosts.take(2)), Duration.Inf)
+
+    val partitioner = new ProxyPartitioner((tup: (Int, String)) => tup._1, new HashPartitioner(2))
+
+    val contentWord = content.flatMap(line => {
+      line.split(' ').toList
+    }).map(word => (word.length, word)).partition(partitioner).cache()
+
+    val loremWord = lorem.flatMap(line => {
+      line.split(' ').toList
+    }).map(word => (word.length, word)).partition(partitioner).cache()
+
+    val contentRes = Future.sequence(contentWord.silos.map { x => x.send() })
+    val loremRes = Future.sequence(loremWord.silos.map { x => x.send() })
+
+    for {
+      res1 <- contentRes
+      res2 <- loremRes
+    } yield {
+      def f(silos: Seq[Seq[(Int, String)]]): Seq[(Int, Seq[Int])] = {
+        silos.zipWithIndex.map { case (data, partNum) => {
+          val keys = data.map(_._1).distinct
+          (partNum -> keys)
+        }}
+      }
+      val keys1 = f(res1)
+      val keys2 = f(res2)
+      keys1.map { case (i, keys) => {
+        keys2.filter(_._1 != i).map { e =>
+          assert((e._2.toSet & keys.toSet) == Set())
+        }
+      }}
+    }
   }
 
   def mapExample(system: SystemImpl, hosts: Seq[Host]): Unit = {
@@ -230,7 +332,9 @@ object RDDExample {
 
     // println("Running examples")
     // externalDependencyExample(system)
-    joinExample(system, hosts)
+    // joinExample(system, hosts)
+    // testPartition(system, hosts)
+    lineageTest(system, hosts)
 
     system.waitUntilAllClosed(30.seconds, 30.seconds)
   }
