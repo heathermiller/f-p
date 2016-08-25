@@ -102,8 +102,11 @@ object RDDExample {
     //   line.split(' ').toList
     // }).map(word => (word.length, word)).groupByKey[Set, TreeMap]()
 
-    val res = contentWord.join(loremWord).combine[String, Set, Map]().collect()
-    // val res = contentWord.join[Set, TreeMap](loremWord).union(loremWord2).collectMap()
+    val res = contentWord
+      .fullJoin(loremWord)
+      .combine[Option[String], Set, Map]()
+      .mapValues(_.flatten)
+      .collect()
 
     println(s"Result... ${res}")
   }

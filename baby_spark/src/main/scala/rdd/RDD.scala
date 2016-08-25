@@ -222,8 +222,86 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     res1.reduce(_ + _)
   }
 
-  def partition(partitioner: Partitioner[T])(implicit cbf: CanBuildTo[T, S]):
-      RDD[T, S] = {
+  def join[X, W, S2 <: Traversable[W], FS <: Traversable[X]]
+    (other: RDD[W, S2], joinExtract: (T, W) => List[X])
+    (implicit ec: ExecutionContext,
+      cbf: CanBuildTo[X, FS]): RDD[X, FS] = {
+
+    val othersSilo = other.silos
+
+    def joinSilos
+      (silo1: SiloRef[S], silo2: SiloRef[S2], cbf: CanBuildTo[X, FS]): SiloRef[FS] = {
+
+      silo2.flatMap(spore {
+        val lsl1 = silo1
+        val lcbf1 = cbf
+        val lJoin1 = joinExtract
+        sl2 => {
+          lsl1.apply(spore {
+            val lsl2 = sl2
+            val lcbf2 = lcbf1
+            val lJoin2 = lJoin1
+            sl1 => {
+              lsl2.flatMap { e1 =>
+                sl1.flatMap {
+                  e2 => lJoin2(e2, e1)
+                }
+              }(collection.breakOut(lcbf2))
+            }
+          })
+        }
+      })
+    }
+
+    def mergeSilos(receiverSilo: SiloRef[FS], restSilo: Seq[SiloRef[FS]], cbf: CanBuildTo[X, FS]):
+        SiloRef[FS] = {
+      def innerMerge(silo1: SiloRef[FS], silo2: SiloRef[FS], cbf: CanBuildTo[X, FS]): SiloRef[FS] = {
+
+        silo2.flatMap(spore {
+          val ls1 = silo1
+          val lcbf = cbf
+          s2 => {
+            ls1.apply(spore {
+              val ls2 = s2
+              val llcbf = lcbf
+              s1 => {
+                val builder = llcbf()
+                builder ++= s1
+                builder ++= ls2
+                builder.result()
+              }
+            })
+          }
+        })
+      }
+
+      restSilo.fold(receiverSilo) {
+        (currentSilo, otherSilo) => innerMerge(currentSilo, otherSilo, cbf)
+      }
+    }
+
+    val part = (partitioner, other.partitioner) match {
+      case (Some(p1), Some(p2)) if p1 == p2 => partitioner
+      case _ => None
+    }
+
+    val res = part match {
+      case Some(p) => {
+        silos.zip(othersSilo).map({ case (s1, s2) => joinSilos(s1, s2, cbf) })
+      }
+      case _ => {
+        silos.map(s1 => {
+        val joined = othersSilo.map(s2 =>
+          joinSilos(s1, s2, cbf)
+        )
+        mergeSilos(joined.head, joined.tail, cbf)
+      })}
+    }
+
+    RDD(res, hosts, part)
+  }
+
+  def partition(partitioner: Partitioner[T])(implicit cbf: CanBuildTo[T, S]): RDD[T, S] = {
     RDD(RDD.partition[T, S](silos)(partitioner), hosts, Some(partitioner))
     }
 }

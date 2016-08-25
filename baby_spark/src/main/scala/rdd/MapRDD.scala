@@ -123,77 +123,58 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
     }
   }
 
-  def join[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, W))]]
+  def innerJoin[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, W))]]
     (other: MapRDD[K, W, S2])
     (implicit ec: ExecutionContext,
       cbf: CanBuildTo[(K, (V, W)), FS]): MapRDD[K, Tuple2[V, W], FS] = {
 
-    val othersSilo = other.silos
-
-    def joinSilos
-      (silo1: SiloRef[S], silo2: SiloRef[S2], cbf: CanBuildTo[(K, (V, W)), FS]): SiloRef[FS] = {
-
-      silo2.flatMap(spore {
-        val lsl1 = silo1
-        val lcbf1 = cbf
-        sl2 => {
-          lsl1.apply(spore {
-            val lsl2 = sl2
-            val lcbf2 = lcbf1
-            sl1 => {
-              lsl2.flatMap { e1 =>
-                sl1.flatMap {
-                  e2 => if (e1._1 == e2._1) List((e1._1, e2._2 -> e1._2)) else Nil
-                }
-              }(collection.breakOut(lcbf2))
-            }
-          })
-        }
-      })
+    def extractor(e1: (K, V), e2: (K, W)): List[(K, (V, W))] =  {
+      if (e1._1 == e2._1) List((e1._1, e1._2 -> e2._2))
+      else Nil
     }
 
-    def mergeSilos(receiverSilo: SiloRef[FS], restSilo: Seq[SiloRef[FS]], cbf: CanBuildTo[(K, (V, W)), FS]):
-        SiloRef[FS] = {
-      def innerMerge(silo1: SiloRef[FS], silo2: SiloRef[FS], cbf: CanBuildTo[(K,
-        (V, W)), FS]): SiloRef[FS] = {
 
-        silo2.flatMap(spore {
-          val ls1 = silo1
-          val lcbf = cbf
-          s2 => {
-            ls1.apply(spore {
-              val ls2 = s2
-              val llcbf = lcbf
-              s1 => {
-                val builder = llcbf()
-                builder ++= s1
-                builder ++= ls2
-                builder.result()
-              }
-            })
-          }
-        })
-      }
+    join[(K, (V, W)), (K, W), S2, FS](other, extractor)
 
-      restSilo.fold(receiverSilo) {
-        (currentSilo, otherSilo) => innerMerge(currentSilo, otherSilo, cbf)
-      }
     }
 
-    val res = (partitioner, other.partitioner) match {
-      case (Some(p1), Some(p2)) if p1 == p2 => {
-        silos.zip(othersSilo).map({ case (s1, s2) => joinSilos(s1, s2, cbf) })
-      }
-      case _ => {
-        silos.map(s1 => {
-        val joined = othersSilo.map(s2 =>
-          joinSilos(s1, s2, cbf)
-        )
-        mergeSilos(joined.head, joined.tail, cbf)
-      })}
+  def leftJoin[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, Option[W]))]]
+    (other: MapRDD[K, W, S2])
+    (implicit ec: ExecutionContext,
+      cbf: CanBuildTo[(K, (V, Option[W])), FS]): MapRDD[K, Tuple2[V, Option[W]], FS] = {
+
+    def extractor(e1: (K, V), e2: (K, W)): List[(K, (V, Option[W]))] = {
+      if (e1._1 == e2._1) List((e1._1, e1._2 -> Some(e2._2)))
+      else List((e1._1, e1._2 -> None))
     }
 
-    MapRDD(res, hosts)
+    join[(K, (V, Option[W])), (K, W), S2, FS](other, extractor)
+  }
+
+  def rightJoin[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (Option[V], W))]]
+    (other: MapRDD[K, W, S2])
+    (implicit ec: ExecutionContext,
+      cbf: CanBuildTo[(K, (Option[V], W)), FS]): MapRDD[K, Tuple2[Option[V], W], FS] = {
+
+    def extractor(e1: (K, W), e2: (K, V)): List[(K, (Option[V], W))] = {
+      if (e1._1 == e2._1) List((e1._1, Some(e2._2) -> e1._2))
+      else List((e1._1, None -> e1._2))
+    }
+
+    other.join[(K, (Option[V], W)), (K, V), S, FS](this, extractor)
+  }
+
+  def fullJoin[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (Option[V], Option[W]))]]
+    (other: MapRDD[K, W, S2])
+    (implicit ec: ExecutionContext,
+      cbf: CanBuildTo[(K, (Option[V], Option[W])), FS]): MapRDD[K, Tuple2[Option[V], Option[W]], FS] = {
+
+    def extractor(e1: (K, V), e2: (K, W)): List[(K, (Option[V], Option[W]))] = {
+      if (e1._1 == e2._1) List((e1._1, Some(e1._2) -> Some(e2._2)))
+      else List((e1._1, Some(e1._2) -> None), (e2._1, None -> Some(e2._2)))
+    }
+
+    join[(K, (Option[V], Option[W])), (K, W), S2, FS](other, extractor)
   }
 
   // TODO: handle the union properly
