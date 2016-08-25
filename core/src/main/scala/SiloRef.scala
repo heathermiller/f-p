@@ -23,15 +23,15 @@ trait SiloRef[T] {
    *  Rather than immediately sending the spore across the network, and waiting
    *  for the operation to finish, the apply method is lazy: it immediately
    *  returns a SiloRef that refers to the result silo.
-   *  
+   *
    *  @param fun the spore to be applied on the data pointed to by this `SiloRef`
-   */ 
+   */
   def apply[S](fun: Spore[T, S])
                                    (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S]
 
   def send(): Future[T]
 
-  def cache(): SiloRef[T]
+  def cache(): Future[SiloRef[T]]
 
   def flatMap[S](fun: Spore[T, SiloRef[S]])
                                      (implicit pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]): SiloRef[S]

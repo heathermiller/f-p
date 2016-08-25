@@ -170,6 +170,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
                 val newSilo = new LocalSilo[s](res)
                 if (cache) {
                   cacheMap += (n -> newSilo)
+                  localSender ! OKCreated(n.refId)
                 } else {
                   respondSilo(promise, localSender, newSilo, app.refId)
                 }
@@ -199,6 +200,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
                 val newSilo = new LocalSilo[s](data)
                 if (cache) {
                   cacheMap += (n -> newSilo)
+                  localSender ! OKCreated(n.refId)
                 } else {
                   respondSilo(promise, localSender, newSilo, fm.refId)
                 }
@@ -219,6 +221,5 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
           }
 
       }
-
   }
 }

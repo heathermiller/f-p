@@ -92,11 +92,11 @@ object RDDExample {
 
     val contentWord = content.flatMap(line => {
       line.split(' ').toList
-    }).map(word => (word.length, word)).partition(partitioner)
+    }).map(word => (word.length, word)).partition(partitioner).cache()
 
     val loremWord = lorem.flatMap(line => {
       line.split(' ').toList
-    }).map(word => (word.length, word)).partition(partitioner)
+    }).map(word => (word.length, word)).partition(partitioner).cache()
 
     // val loremWord2 = lorem2.flatMap(line => {
     //   line.split(' ').toList
@@ -207,14 +207,14 @@ object RDDExample {
       }
     })
 
-    val res1cached = Await.result(timeSiloCached.send(), 10.seconds)
-    val res1not = Await.result(timeSiloNotCached.send(), 10.seconds)
-    Thread.sleep(2000)
-    val res2cached = Await.result(timeSiloCached.send(), 10.seconds)
-    val res2not = Await.result(timeSiloNotCached.send(), 10.seconds)
+    // val res1cached = Await.result(timeSiloCached.send(), 10.seconds)
+    // val res1not = Await.result(timeSiloNotCached.send(), 10.seconds)
+    // Thread.sleep(2000)
+    // val res2cached = Await.result(timeSiloCached.send(), 10.seconds)
+    // val res2not = Await.result(timeSiloNotCached.send(), 10.seconds)
 
-    println(s"Cache: Res 1 = $res1cached | Res2 = $res2cached")
-    println(s"Not cache: Res 1 = $res1not | Res2 = $res2not")
+    // println(s"Cache: Res 1 = $res1cached | Res2 = $res2cached")
+    // println(s"Not cache: Res 1 = $res1not | Res2 = $res2not")
   }
 
   def main(args: Array[String]): Unit = {

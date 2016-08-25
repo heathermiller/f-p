@@ -47,12 +47,15 @@ abstract class ProxySiloRef[T](refId: Int, val host: Host)(implicit system: Silo
   }
 
   def send(): Future[T] = {
-    materialize(false)
+    val n = node()
+    val host = system.location(refId)
+    system.send(host, Graph(n, false)).map(_.asInstanceOf[T])
   }
 
-  def cache(): SiloRef[T] = {
-    Await.ready(materialize(true), Duration.Inf)
-    this
+  def cache(): Future[SiloRef[T]] = {
+    val n = node()
+    val host = system.location(refId)
+    system.send(host, Graph(n, true)).map(x => this)
   }
 
   override def flatMap[S](fun: Spore[T, SiloRef[S]])

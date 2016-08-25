@@ -197,6 +197,11 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     res1.reduce(f)
   }
 
+  def cache()(implicit ec: ExecutionContext): RDD[T, S] = {
+    val res = Future.sequence(silos.map(_.cache()))
+    RDD(Await.result(res, Duration.Inf))
+  }
+
   def collect()(implicit ec: ExecutionContext, cbf: CanBuildTo[T, S]): S = {
     Await.result(Future.sequence(silos.map {
       s => s.send()

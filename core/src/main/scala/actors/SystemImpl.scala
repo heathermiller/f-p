@@ -127,6 +127,8 @@ class SystemImpl extends SiloSystem with SiloSystemInternal {
   def send[T <: ReplyMessage : Pickler](host: Host, msg: T): Future[Any] = {
     val nodeActor = Config.m(host)
     println(s"found node actor ${nodeActor.path.name}")
-    (nodeActor ? msg).map { case ForceResponse(value) => value }
+    (nodeActor ? msg).map {
+      case ForceResponse(value) => value
+      case OKCreated(_) => }
   }
 }
