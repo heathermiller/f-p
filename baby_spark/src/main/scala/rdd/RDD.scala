@@ -52,6 +52,25 @@ object RDD {
     }).map { x => RDD(List(x)) }
   }
 
+  def fromTextFile(filename: String, hosts: Seq[Host])
+    (implicit system: SiloSystem, ec: ExecutionContext): Future[RDD[String, List[String]]] = {
+
+    val silos = hosts.zipWithIndex.map({ case (h, index) => {
+      system.fromFun(h)(spore {
+        val fl = filename
+        val i = index
+        val total = hosts.length
+        _: Unit => {
+          val lines = Source.fromFile(fl).mkString.split('\n')
+          val splitting = Math.ceil(1.0 * lines.length/total).toInt
+          val newLines = lines.grouped(splitting).toList
+          new LocalSilo[List[String]](newLines(i).toList)
+        }
+      })
+    }})
+    Future.sequence(silos).map { x => RDD(x) }
+  }
+
   def partition[T, S <: Traversable[T]](silos: Seq[SiloRef[S]])(partitioner:
       Partitioner[T])
     (implicit cbf: CanBuildTo[T, S]):
@@ -108,8 +127,7 @@ class RDD[T, S <: Traversable[T]] private[rdd](
 
   val partitioner: Option[Partitioner[P]] = None
 
-  def map[B, V <: Traversable[B]](f: Spore[T, B])(implicit cbt: CanBuildTo[B,
-    V]): RDD[B, V] = {
+  def map[B, V <: Traversable[B]](f: Spore[T, B])(implicit cbt: CanBuildTo[B, V]): RDD[B, V] = {
     RDD(silos.map {
       s => s.apply[V](spore {
         val localFunc = f
@@ -121,8 +139,7 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     })
   }
 
-  def filter(f: Spore[T, Boolean])(implicit cbf: RDD.CanBuildTo[T, S]): RDD[T,
-    S] = {
+  def filter(f: Spore[T, Boolean])(implicit cbf: RDD.CanBuildTo[T, S]): RDD[T, S] = {
     val resList = silos.map {
       s => s.apply[S](spore {
         val lf = f
@@ -133,7 +150,7 @@ class RDD[T, S <: Traversable[T]] private[rdd](
             if (lf(elem)) {
               builder += elem
             }
-          } }
+          }}
           builder.result()
         }
       })
@@ -141,8 +158,7 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     RDD(resList, partitioner)
   }
 
-  def groupBy[K, IS <: Traversable[T], RS <: Traversable[(K, IS)]](f: Spore[T,
-    K])
+  def groupBy[K, IS <: Traversable[T], RS <: Traversable[(K, IS)]](f: Spore[T, K])
     (implicit cbf1: CanBuildTo[T, IS],
       cbf2: CanBuildTo[(K, IS), RS]): MapRDD[K, IS, RS] = {
     val resList = silos.map {
@@ -166,8 +182,8 @@ class RDD[T, S <: Traversable[T]] private[rdd](
     MapRDD[K, IS, RS](resList, hosts)
   }
 
-  def flatMap[B, V <: Traversable[B]](f: Spore[T, Seq[B]])(implicit cbt1:
-    CanBuildTo[B, V]): RDD[B, V] = {
+  def flatMap[B, V <: Traversable[B]](f: Spore[T, Seq[B]])
+    (implicit cbt1: CanBuildTo[B, V]): RDD[B, V] = {
     val resList = silos.map {
       s => s.apply[V](spore {
         val func = f

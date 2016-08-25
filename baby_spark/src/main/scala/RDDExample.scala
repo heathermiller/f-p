@@ -332,9 +332,9 @@ object RDDExample {
 
     // println("Running examples")
     // externalDependencyExample(system)
-    // joinExample(system, hosts)
-    // testPartition(system, hosts)
-    lineageTest(system, hosts)
+    joinExample(system, hosts)
+    testPartition(system, hosts)
+    // lineageTest(system, hosts)
 
     system.waitUntilAllClosed(30.seconds, 30.seconds)
   }

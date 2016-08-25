@@ -58,15 +58,13 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
   def resetPromise(id: Int): Unit = promiseOf -= id
 
   def respondSilo(promise: Promise[LocalSilo[_]], sender: ActorRef, silo: LocalSilo[_], refId: Int): Unit = {
-    promise.success(silo)
-    println(s"responding to ${sender.path.name}")
+    promise.trySuccess(silo)
     sender ! ForceResponse(silo.value)
-    resetPromise(refId)
+    // resetPromise(refId)
   }
 
   def receive = {
     case Terminate() =>
-      println(s"number objects pickled: ${numPickled.get}")
       context.stop(self)
 
     case theMsg @ InitSilo(fqcn, refId) =>
@@ -152,27 +150,55 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
       println(s"node actor: received graph with node $n")
       println(s"graph is: ${msg}")
 
-      n match {
-        // expect a ForceResponse(value)
-        case app: Apply[t, s] =>
-          val fun = app.fun
-          val promise = getOrElseInitPromise(app.refId)
-          val localSender = sender
-          if (cacheMap.contains(n)) {
-            val res = cacheMap(n)
-            respondSilo(promise, localSender, res, app.refId)
-          }
-          else {
+      if (cacheMap.contains(n)) {
+        val res = cacheMap(n)
+        val msg = if (cache) OKCreated(0) else { ForceResponse(res.value) }
+        sender ! msg
+      } else {
+        n match {
+          // expect a ForceResponse(value)
+          case app: Apply[t, s] =>
+            val fun = app.fun
+            val localSender = sender
+            val promise = getOrElseInitPromise(app.refId)
             (self ? Graph(app.input, false)).map { case ForceResponse(value) =>
               println(s"yay: input graph is materialized")
               try {
                 val res = fun(value.asInstanceOf[t])
                 val newSilo = new LocalSilo[s](res)
+                cacheMap += (n -> newSilo)
                 if (cache) {
-                  cacheMap += (n -> newSilo)
-                  localSender ! OKCreated(n.refId)
+                  val msg = OKCreated(n.refId)
                 } else {
-                  respondSilo(promise, localSender, newSilo, app.refId)
+                  val msg = ForceResponse(newSilo)
+                }
+                respondSilo(promise, localSender, newSilo, app.refId)
+              } catch {
+                case e: Exception => {
+                  println("EXCEPTION EXCEPTION EXCEPTION")
+                  e.printStackTrace()
+                  localSender ! ForceError(e)
+                }
+              }
+          }
+
+          case fm: FMapped[t, s] =>
+            val fun = fm.fun
+            val localSender = sender
+            val promise = getOrElseInitPromise(fm.refId)
+            (self ? Graph(fm.input, false)).map { case ForceResponse(value) =>
+              try {
+                val resSilo = fun(value.asInstanceOf[t])
+                val res = resSilo.send()
+                res.map { case data =>
+                  val newSilo = new LocalSilo[s](data)
+                  cacheMap += (n -> newSilo)
+                  if (cache) {
+                    val msg = OKCreated(n.refId)
+                  } else {
+                    val msg = ForceResponse(newSilo)
+                  }
+                  respondSilo(promise, localSender, newSilo, fm.refId)
                 }
               } catch {
                 case e: Exception => {
@@ -182,44 +208,13 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
                 }
               }
             }
-          }
 
-        case fm: FMapped[t, s] =>
-          val fun = fm.fun
-          val promise = getOrElseInitPromise(fm.refId)
-          val localSender = sender
-          if (cacheMap.contains(n)) {
-            val res = cacheMap(n)
-            respondSilo(promise, localSender, res, fm.refId)
-          }
-          (self ? Graph(fm.input, false)).map { case ForceResponse(value) =>
-            try {
-              val resSilo = fun(value.asInstanceOf[t])
-              val res = resSilo.send()
-              res.map { case data =>
-                val newSilo = new LocalSilo[s](data)
-                if (cache) {
-                  cacheMap += (n -> newSilo)
-                  localSender ! OKCreated(n.refId)
-                } else {
-                  respondSilo(promise, localSender, newSilo, fm.refId)
-                }
-              }
-            } catch {
-              case e: Exception => {
-                println("EXCEPTION EXCEPTION EXCEPTION")
-                e.printStackTrace()
-                localSender ! ForceError(e)
-              }
+          case m: Materialized =>
+            val s = sender
+            promiseOf(m.refId).future.foreach { (silo: LocalSilo[_]) =>
+              s ! ForceResponse(silo.value)
             }
-          }
-
-        case m: Materialized =>
-          val s = sender
-          promiseOf(m.refId).future.foreach { (silo: LocalSilo[_]) =>
-            s ! ForceResponse(silo.value)
-          }
-
+        }
       }
   }
 }
