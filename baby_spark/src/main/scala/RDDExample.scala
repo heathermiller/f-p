@@ -8,9 +8,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.immutable.{TreeMap, Map}
 import scala.io.Source
 
-import scalaz._
-import Scalaz._
-
 import scala.spores._
 import scala.pickling._
 import Defaults._
@@ -26,27 +23,6 @@ import silt.graph.{ Apply, ApplySiloRef, FMapped, FMappedSiloRef, Materialized, 
 
 
 object RDDExample {
-
-  implicit def TreeMapSemigroup[K, V : Semigroup]
-    (implicit ordering: scala.Ordering[K]): Semigroup[TreeMap[K, V]] =
-    new Semigroup[TreeMap[K, V]] with std.MapInstances with std.MapFunctions {
-
-    def zero = new TreeMap[K, V]()(ordering)
-    // Repetition of scalaz.std.Map: method apppend defined in mapMonoid
-    override def append(m1: TreeMap[K, V], m2: => TreeMap[K, V]): TreeMap[K, V] = {
-      val m2Instance = m2
-
-      val (from, to, semigroup) = {
-        if (m1.size > m2Instance.size) (m2Instance, m1, Semigroup[V].append(_:V, _:V))
-        else (m1, m2Instance, (Semigroup[V].append(_: V, _: V)).flip)
-      }
-
-      from.foldLeft(to) {
-        case (to, (k, v)) => to.updated(k, to.get(k).map(semigroup(_, v)).getOrElse(v))
-      }
-    }
-  }
-
   def multiSiloRDD(system: SystemImpl, hosts: Seq[Host], n: Int): Unit = {
     assert(hosts.length >= n)
 
@@ -95,7 +71,7 @@ object RDDExample {
       line.split(' ').toList
     }).map(word => (word.length, word))
 
-    val res = contentWord.fullJoin(loremWord).silos
+    val res = contentWord.join(loremWord).silos
     printLineage(res(0))
     printLineage(res(1))
   }
@@ -152,7 +128,7 @@ object RDDExample {
 
     println("Got the content, join..")
 
-    val partitioner = new ProxyPartitioner((tup: (Int, String)) => tup._1, new HashPartitioner(2))
+    val partitioner = KeyPartitioner[Int, String](2)
 
     val contentWord = content.flatMap(line => {
       line.split(' ').toList
@@ -162,14 +138,9 @@ object RDDExample {
       line.split(' ').toList
     }).map(word => (word.length, word)).partition(partitioner).cache()
 
-    // val loremWord2 = lorem2.flatMap(line => {
-    //   line.split(' ').toList
-    // }).map(word => (word.length, word)).groupByKey[Set, TreeMap]()
-
     val res = contentWord
-      .fullJoin(loremWord)
-      .combine[Option[String], Set, Map]()
-      .mapValues(_.flatten)
+      .join(loremWord)
+      .combine[String, Set, Map]()
       .collect()
 
     println(s"Result: ${res}")
@@ -223,12 +194,12 @@ object RDDExample {
     val bigLines = lineLength.filter(l => l > 30).count()
     println(s"There is ${bigLines} lines bigger than 30 characters")
 
-    val sizeLine = content.map[(Int, List[String]), TreeMap[Int, List[String]]](line => {
-      val words = line.split(' ').toList
-      (words.length, words)
-    }).collect()
+    // val sizeLine = content.map[(Int, List[String]), TreeMap[Int, List[String]]](line => {
+    //   val words = line.split(' ').toList
+    //   (words.length, words)
+    // }).collect()
 
-    println(s"Results.. ${sizeLine}")
+    // println(s"Results.. ${sizeLine}")
   }
 
   def externalDependencyExample(system: SystemImpl): Unit = {
@@ -333,7 +304,7 @@ object RDDExample {
     // println("Running examples")
     // externalDependencyExample(system)
     joinExample(system, hosts)
-    testPartition(system, hosts)
+    // testPartition(system, hosts)
     // lineageTest(system, hosts)
 
     system.waitUntilAllClosed(30.seconds, 30.seconds)

@@ -71,27 +71,26 @@ object RDD {
     Future.sequence(silos).map { x => RDD(x) }
   }
 
-  def partition[T, S <: Traversable[T]](silos: Seq[SiloRef[S]])(partitioner:
-      Partitioner[T])
-    (implicit cbf: CanBuildTo[T, S]):
-      Seq[SiloRef[S]] = {
+  def partition[T, S <: Traversable[T]]
+    (silos: Seq[SiloRef[S]])(partitioner: Partitioner[T])
+    (implicit cbf: CanBuildTo[T, S]): Seq[SiloRef[S]] = {
+
+    def partF(partition: Int)(x: T): Boolean = partitioner.getPartition(x) == partition
 
     def shuffleSilo(silo1: SiloRef[S], silo2: SiloRef[S], partition: Int): SiloRef[S] = {
 
-      def partF(x: T): Boolean = partitioner.getPartition(x) == partition
-
+      val f = partF(partition) _
       silo2.flatMap(spore {
         val ls1 = silo1
-        val lPartF = partF _
-        val lcbf = cbf
+        val lPartF = f
+        val lcbf = cbf()
         s2 => {
           ls1.apply(spore {
-            val ls2 = s2.filter(lPartF(_))
+            val ls2 = s2.filter(lPartF)
             val llPartF = lPartF
-            val llcbf = lcbf
+            val builder = lcbf
             s1 => {
-              val builder = llcbf()
-              builder ++= s1.filter(llPartF)
+              builder ++= s1
               builder ++= ls2
               builder.result()
             }
@@ -101,7 +100,16 @@ object RDD {
     }
 
     val newSilos = silos.zipWithIndex.map { case (s1, index) =>
-      silos.filter(_ != s1).fold(s1) {
+      val f = partF(index) _
+      val filteredSilo = s1.apply(spore {
+          val lPartF = f
+          val builder = cbf()
+          x => {
+            builder ++= x.filter(lPartF)
+            builder.result()
+          }
+        })
+      silos.filter(_ != s1).fold(filteredSilo) {
         (currentSilo, otherSilo) => shuffleSilo(currentSilo, otherSilo, index)
       }
     }
@@ -170,6 +178,7 @@ class RDD[T, S <: Traversable[T]] private[rdd](
           val res0 = content.groupBy(lf)
           val b1 = lcbf1()
           val b2 = lcbf2()
+          b2.sizeHint(res0)
           res0.foreach{case (k, vals) => {
             b1 ++= vals
             b2 += (k -> b1.result())
@@ -201,15 +210,15 @@ class RDD[T, S <: Traversable[T]] private[rdd](
 
   def reduce(f: Spore2[T, T, T])(implicit ec: ExecutionContext): T = {
     val resList = silos.map {
-      s => s.apply[List[T]](spore {
+      s => s.apply[T](spore {
         val reducer = f
         content => {
-          content.reduce(reducer) :: Nil
+          content.reduce(reducer)
         }
       }).send()
     }
     val res = Future.sequence(resList)
-    val res1 = Await.result(res, Duration.Inf).flatten
+    val res1 = Await.result(res, Duration.Inf)
     res1.reduce(f)
   }
 
@@ -229,93 +238,24 @@ class RDD[T, S <: Traversable[T]] private[rdd](
 
   def count()(implicit ec: ExecutionContext): Long = {
     val resList = silos.map {
-      s => s.apply[List[Long]](spore {
-        content => content.size.longValue :: Nil
+      s => s.apply[Long](spore {
+        content => content.size.longValue
       }).send()
     }
     val res = Future.sequence(resList)
-    val res1 = Await.result(res, Duration.Inf).flatten
+    val res1 = Await.result(res, Duration.Inf)
     res1.reduce(_ + _)
   }
 
-  def join[X, W, S2 <: Traversable[W], FS <: Traversable[X]]
-    (other: RDD[W, S2], joinExtract: (T, W) => List[X])
-    (implicit ec: ExecutionContext,
-      cbf: CanBuildTo[X, FS]): RDD[X, FS] = {
+  // join[(K, (V, W)), (K, W), S2, FS](other)
+  // def join[X, W, S2 <: Traversable[W], FS <: Traversable[X]]
+  //   (other: RDD[W, S2])
+  //   (implicit ec: ExecutionContext,
+  //     cbf: CanBuildTo[X, FS]): RDD[X, FS] = {
 
-    val othersSilo = other.silos
 
-    def joinSilos
-      (silo1: SiloRef[S], silo2: SiloRef[S2], cbf: CanBuildTo[X, FS]): SiloRef[FS] = {
-
-      silo2.flatMap(spore {
-        val lsl1 = silo1
-        val lcbf1 = cbf
-        val lJoin1 = joinExtract
-        sl2 => {
-          lsl1.apply(spore {
-            val lsl2 = sl2
-            val lcbf2 = lcbf1
-            val lJoin2 = lJoin1
-            sl1 => {
-              lsl2.flatMap { e1 =>
-                sl1.flatMap {
-                  e2 => lJoin2(e2, e1)
-                }
-              }(collection.breakOut(lcbf2))
-            }
-          })
-        }
-      })
-    }
-
-    def mergeSilos(receiverSilo: SiloRef[FS], restSilo: Seq[SiloRef[FS]], cbf: CanBuildTo[X, FS]):
-        SiloRef[FS] = {
-      def innerMerge(silo1: SiloRef[FS], silo2: SiloRef[FS], cbf: CanBuildTo[X, FS]): SiloRef[FS] = {
-
-        silo2.flatMap(spore {
-          val ls1 = silo1
-          val lcbf = cbf
-          s2 => {
-            ls1.apply(spore {
-              val ls2 = s2
-              val llcbf = lcbf
-              s1 => {
-                val builder = llcbf()
-                builder ++= s1
-                builder ++= ls2
-                builder.result()
-              }
-            })
-          }
-        })
-      }
-
-      restSilo.fold(receiverSilo) {
-        (currentSilo, otherSilo) => innerMerge(currentSilo, otherSilo, cbf)
-      }
-    }
-
-    val part = (partitioner, other.partitioner) match {
-      case (Some(p1), Some(p2)) if p1 == p2 => partitioner
-      case _ => None
-    }
-
-    val res = part match {
-      case Some(p) => {
-        silos.zip(othersSilo).map({ case (s1, s2) => joinSilos(s1, s2, cbf) })
-      }
-      case _ => {
-        silos.map(s1 => {
-        val joined = othersSilo.map(s2 =>
-          joinSilos(s1, s2, cbf)
-        )
-        mergeSilos(joined.head, joined.tail, cbf)
-      })}
-    }
-
-    RDD(res, hosts, part)
-  }
+  //   RDD(res, hosts, part)
+  // }
 
   def partition(partitioner: Partitioner[T])(implicit cbf: CanBuildTo[T, S]): RDD[T, S] = {
     RDD(RDD.partition[T, S](silos)(partitioner), hosts, Some(partitioner))

@@ -62,9 +62,6 @@ object build extends Build {
     settings = standardSettings ++ SbtMultiJvm.multiJvmSettings ++ Seq[Sett](
       name := "baby_spark",
       fork := true,
-      libraryDependencies ++= Seq(
-        "org.scalaz" %% "scalaz-core" % "7.2.0"
-      ),
       cancelable in Global := true,
       compile in MultiJvm <<= (compile in MultiJvm) triggeredBy (compile in Test)
     )
