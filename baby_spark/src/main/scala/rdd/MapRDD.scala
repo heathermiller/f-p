@@ -128,60 +128,51 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
 
   def join[W, S2 <: Traversable[(K, W)], FS <: Traversable[(K, (V, W))]]
     (other: MapRDD[K, W, S2])
-    (implicit ec: ExecutionContext,
-      cbf: CanBuildTo[(K, (V, W)), FS]): MapRDD[K, Tuple2[V, W], FS] = {
+      (implicit cbf: CanBuildTo[(K, W), S2],
+      cbf2: CanBuildTo[(K, (V, W)), FS]): MapRDD[K, Tuple2[V, W], FS] = {
 
-    val othersSilo = other.silos
+    val otherSilos = other.silos
 
     type X = (K, (V, W))
 
-    def joinSilos
-      (silo1: SiloRef[S], silo2: SiloRef[S2], cbf: CanBuildTo[X, FS]): SiloRef[FS] = {
-
-      silo2.flatMap(spore {
-        val lsl1 = silo1
-        val lcbf1 = cbf
-        sl2 => {
-          lsl1.apply(spore {
-            val lsl2 = sl2
-            val lcbf2 = lcbf1
-            sl1 => {
-              lsl2.flatMap { e1 =>
-                sl1.flatMap {
-                  e2 => if (e1._1 == e2._1) List((e1._1, (e2._2, e1._2))) else Nil
-                }
-              }(collection.breakOut(lcbf2))
-            }
-          })
-        }
-      })
-    }
-
-    def mergeSilos(receiverSilo: SiloRef[FS], restSilo: Seq[SiloRef[FS]], cbf: CanBuildTo[X, FS]):
-        SiloRef[FS] = {
-      def innerMerge(silo1: SiloRef[FS], silo2: SiloRef[FS], cbf: CanBuildTo[X, FS]): SiloRef[FS] = {
-
-        silo2.flatMap(spore {
-          val ls1 = silo1
-          val lcbf = cbf
-          s2 => {
-            ls1.apply(spore {
-              val ls2 = s2
-              val llcbf = lcbf
-              s1 => {
-                val builder = llcbf()
-                builder ++= s1
-                builder ++= ls2
-                builder.result()
-              }
-            })
+    def aggregate(recipient: SiloRef[S], otherSilos: Seq[SiloRef[S2]])
+      (implicit cbf: CanBuildTo[(K, W), S2]): SiloRef[(S, S2)] = {
+        val container = recipient.apply(spore {
+          val lCbf = cbf
+          s => {
+            val builder = lCbf()
+            (s, builder.result())
           }
         })
-      }
-
-      restSilo.fold(receiverSilo) {
-        (currentSilo, otherSilo) => innerMerge(currentSilo, otherSilo, cbf)
-      }
+        otherSilos.foldLeft(container)({ case (acc, other) => {
+          other.flatMap(spore {
+            val lAcc = acc
+            val lCbf = cbf
+            otherData => {
+              lAcc.apply(spore {
+                val llCbf = lCbf
+                val lOtherData = otherData
+                accuData => {
+                  val builder = llCbf()
+                  builder ++= accuData._2
+                  builder ++= lOtherData
+                  (accuData._1, builder.result())
+                }
+              })
+            }
+          })
+        }})
+    }
+    def joinLocal(silo: SiloRef[(S, S2)])(implicit cbf: CanBuildTo[X, FS]): SiloRef[FS] = {
+      silo.apply(spore {
+        val lCbf = cbf
+        content =>
+          content._1.flatMap { e1 =>
+            content._2.flatMap { e2 =>
+              if (e1._1 == e2._1) List((e1._1, (e1._2, e2._2))) else Nil
+            }
+          }(collection.breakOut(lCbf))
+      })
     }
 
     val part = (partitioner, other.partitioner) match {
@@ -191,16 +182,11 @@ class MapRDD[K, V, S <: Traversable[(K, V)]]
 
     val res = part match {
       case Some(p) => {
-        silos.zip(othersSilo).map({ case (s1, s2) => joinSilos(s1, s2, cbf) })
+        silos.zip(otherSilos).map({ case (s1, s2) => joinLocal(aggregate(s1, Seq(s2))) })
       }
-      case _ => {
-        silos.map(s1 => {
-        val joined = othersSilo.map(s2 =>
-          joinSilos(s1, s2, cbf)
-        )
-        mergeSilos(joined.head, joined.tail, cbf)
-      })}
-    }
+      case _ =>
+        silos.map(s1 => joinLocal(aggregate(s1, otherSilos)))
+      }
 
     MapRDD(res, hosts, part)
   }
