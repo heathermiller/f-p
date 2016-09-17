@@ -1,7 +1,6 @@
 package silt
 package actors
 
-import scala.collection.mutable.HashMap
 import scala.language.existentials
 
 import akka.actor.{Actor, ActorRef}
@@ -11,11 +10,6 @@ import akka.pattern.ask
 import scala.pickling._
 import Defaults._
 import binary._
-
-import scala.spores._
-import SporePickler._
-
-import graph.Picklers._
 
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration._
@@ -35,14 +29,14 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
   implicit val timeout: Timeout = 300.seconds
 
   //TODO: do we need to use TrieMap here?
-  // val builderOfEmitterId: mutable.Map[Int, (AbstractBuilder, Int, Int)] = new TrieMap[Int, (AbstractBuilder, Int, Int)]
+  val builderOfEmitterId: mutable.Map[Int, (AbstractBuilder, Int, Int)] = new TrieMap[Int, (AbstractBuilder, Int, Int)]
 
   // maps SiloRef refIds to promises of local silo instances
   val promiseOf: mutable.Map[Int, Promise[LocalSilo[_]]] = new TrieMap[Int, Promise[LocalSilo[_]]]
 
   val numPickled = new AtomicInteger(0)
 
-  val cacheMap: mutable.Map[Node, LocalSilo[_]] = new HashMap[Node, LocalSilo[_]]
+  val cacheMap: mutable.Map[Node, LocalSilo[_]] = new mutable.HashMap[Node, LocalSilo[_]]
 
   def getOrElseInitPromise(id: Int): Promise[LocalSilo[_]] = promiseOf.get(id) match {
     case None =>

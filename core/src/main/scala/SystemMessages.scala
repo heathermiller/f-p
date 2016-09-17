@@ -14,7 +14,7 @@ abstract class ReplyMessage {
 // that way we can cast the data to T before operating on it.
 case class InitSilo(fqcn: String, refId: Int) extends ReplyMessage
 
-case class InitSiloFun[T](fun: Spore[Unit, LocalSilo [T]], refId: Int) extends ReplyMessage
+case class InitSiloFun[T](fun: Spore[Unit, LocalSilo[T]], refId: Int) extends ReplyMessage
 
 case class OKCreated(refId: Int) extends ReplyMessage
 

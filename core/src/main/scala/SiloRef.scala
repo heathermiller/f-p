@@ -1,9 +1,10 @@
 package silt
 
-import scala.spores._
-import scala.pickling._
+import scala.spores.{Spore, Spore2}
+import scala.pickling.{Pickler, Unpickler}
 
 import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 
 /** A program operating on data stored in a silo can only do so using a
  *  reference to the silo, a so-called `SiloRef`.
@@ -27,14 +28,14 @@ trait SiloRef[T] {
    *  @param fun the spore to be applied on the data pointed to by this `SiloRef`
    */
   def apply[S](fun: Spore[T, S])
-  (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S]
+              (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S]
 
   def send(): Future[T]
 
   def cache(): Future[SiloRef[T]]
 
   def flatMap[S](fun: Spore[T, SiloRef[S]])
-  (implicit pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]): SiloRef[S]
+                (implicit pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]): SiloRef[S]
 
   def id: SiloRefId
 
@@ -69,14 +70,13 @@ class LocalSilo[T](private[silt] val value: T) {
   }
 
   def doPumpTo[A, B](existFun: Function2[A, Emitter[B], Unit], emitter: Emitter[B]): Unit = {
-    // val fun = existFun.asInstanceOf[Function2[U, Emitter[B], Unit]]
-    // Future {
-    //   value.foreach { elem =>
-    //     // println(s"visiting element $elem")
-    //     fun(elem, emitter)
-    //   }
-    //   emitter.done()
-    // }
-}
-
+    val fun = existFun.asInstanceOf[Function2[Any, Emitter[B], Unit]]
+    Future {
+      value.asInstanceOf[Traversable[Any]].foreach { elem =>
+        // println(s"visiting element $elem")
+        fun(elem, emitter)
+      }
+      emitter.done()
+    }
+  }
 }

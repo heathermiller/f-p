@@ -20,7 +20,7 @@ final case class Apply[T, S]
                       (input: Node, refId: Int, fun: Spore[T, S], pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]) extends Node
 
 final case class FMapped[T, S]
-  (input: Node, refId: Int, fun: Spore[T, SiloRef[S]], pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]) extends Node
+                        (input: Node, refId: Int, fun: Spore[T, SiloRef[S]], pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]) extends Node
 
 final case class MultiInput[R](inputs: Seq[PumpNodeInput[_, _, R, _]], refId: Int, destHost: Host, emitterId: Int) extends Node
 

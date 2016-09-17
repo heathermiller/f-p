@@ -1,14 +1,10 @@
 package silt
 package graph
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
 import scala.spores._
 import scala.pickling._
 import Defaults._
 import binary._
-
-import SporePickler._
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -102,7 +98,6 @@ class FMappedSiloRef[S, T]
   def node(): Node = {
     // recursively create graph node for `input`
     val prevNode = input.node()
-
     new FMapped[S, T](prevNode, refId, f, pickler, unpickler)
   }
 }
