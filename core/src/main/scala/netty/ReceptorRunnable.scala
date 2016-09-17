@@ -117,9 +117,18 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         system.location += (refId -> host)
         val promise = getOrElseInitPromise(refId)
         Future {
-          val newSilo = fun()
-          promise.success(newSilo)
-          println(s"SERVER: created $newSilo (${newSilo.value}). responding...")
+          try {
+            val newSilo = fun ()
+            promise.success(newSilo)
+            println(s"SERVER: created $newSilo (${newSilo.value}). responding...")
+          } catch {
+            case e : Throwable =>
+              promise.failure(e)
+              val replyMsg = ForceError(e)
+              replyMsg.id = theMsg.id
+              resultPromise.success(Some(replyMsg))
+              return
+          }
           val replyMsg = OKCreated(refId)
           replyMsg.id = theMsg.id
           resultPromise.success(Some(replyMsg))

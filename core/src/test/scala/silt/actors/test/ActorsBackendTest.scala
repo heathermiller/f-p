@@ -67,4 +67,32 @@ class ActorsBackendTest {
     println(s"result 2: $res2")
     assert(res2 == List(Item("14"), Item("14"), Item("13"), Item("13"), Item("12"), Item("12")))
   }
+
+  @Test
+  def flatMap(): Unit = {
+    val system = new SystemImpl
+    val host = Host("127.0.0.1", 8090)
+    val fut1 = system.fromClass[Int, List[Int]](classOf[MySiloFactory], host)
+    val fut2 = system.fromClass[Int, List[Int]](classOf[MySiloFactory], host)
+
+    val done1 = fut1.flatMap { siloref1 =>
+      fut2.flatMap { siloref2 =>
+        val siloref3 = siloref1.flatMap[Int, List[Int]](spore {
+          val localSiloRef = siloref2
+          (data: List[Int]) =>
+            localSiloRef.apply[Int, List[Int]](spore {
+              val localData = data
+              (data2: List[Int]) =>
+                localData ++ data2
+            })
+          })
+        siloref3.send()
+      }
+    }
+
+    val res1 = Await.result(done1, 5.seconds)
+    system.waitUntilAllClosed()
+    println(s"result 1: $res1")
+    assert(res1.toString == "List(4, 3, 2, 4, 3, 2)")
+  }
 }
