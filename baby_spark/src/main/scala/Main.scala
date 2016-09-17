@@ -22,47 +22,12 @@ case class Vehicule(owner: Person, brand: String, year: Int)
 
 object Main {
 
+  /**
+   * Create a silo from a filename.
+   */
   def populateSilo(filename: String): LocalSilo[List[String]] = {
     val lines = Source.fromFile(filename).mkString.split('\n').toList
     new LocalSilo(lines)
-  }
-
-  def flatMapEx(system: SystemImpl, host: Host): Future[List[Int]] = {
-    val silo = system.fromFun(host)(spore {
-      _ => populateSilo ("data/data.txt")
-    })
-
-    def filterData(l: List[List[String]]): List[Int] = {
-      l.flatten.filter(s => !(Set(",", ".", "!").contains(s))).length :: Nil
-    }
-
-    val done = silo.flatMap {
-      s => {
-        s.flatMap(spore {
-          val localSilo = s
-          val f = filterData _
-          _: List[String] => {
-            val splitted = localSilo.apply[List[List[String]]](spore {
-              l: List[String] => l.map(_.split(' ').toList)
-            })
-
-            splitted.apply[List[Int]](spore {
-              val f2 = f
-              l: List[List[String]] => f2(l)
-              // l: List[List[String]] => {
-              //   val res1 = l.flatten
-              //   val filterSet = Set(",", ".", "!")
-              //   val res2 = res1.filter(s => !filterSet.contains(s))
-              //   val res3 = res2.length
-              //   List(res3)
-              // }
-            })
-          }
-        }).send()
-      }
-    }
-
-    return done
   }
 
   def generateData(nPerson: Int, nVehicule: Int): (List[Person], List[Vehicule]) = {
@@ -79,10 +44,15 @@ object Main {
     (persons.toList, vehicules.toList)
   }
 
-  // Reproduce the example from the F-P paper
+  /**
+   * Reproduce the flatMap example from the F-P paper.
+   */
   def flatMapPaperEx(system: SystemImpl, host: Host): Future[List[(Person, Vehicule)]] = {
+    // Generate 10_000 person and 50_000 vehicules.
     val pv = generateData(10000, 50000)
 
+    // Initialize the two silo. `fromFun` returns a Future, hence the for-loop
+    // below.
     val personsSilo = system.fromFun(host)(spore {
       val lPersons = pv._1
       _ => new LocalSilo[List[Person]](lPersons)
@@ -97,16 +67,22 @@ object Main {
       pSilo <- personsSilo
       vSilo <- vehiculesSilo
       res <- {
+        // Filter the persons to only get the adults ones.
         val adults = pSilo.apply[List[Person]](spore {
           ps => ps.filter(p => p.age >= 18)
         })
 
+        // Calling `flatMap` on `adults` allows us to send its content using
+        // spore to the other silo.
         val owners: Future[List[(Person, Vehicule)]] = adults.flatMap(spore {
           val lVehicules = vSilo
           ps => {
             lVehicules.apply[List[(Person, Vehicule)]](spore {
+              // This is the line that indicate the data of `adults` is sent to
+              // the `vehicules` silo (and node).
               val localPs = ps
               vs => {
+                // Actual join
                 localPs.flatMap(p => {
                   vs.flatMap { v => if (v.owner.name == p.name) List((p, v)) else Nil }
                 })
@@ -127,12 +103,10 @@ object Main {
 
     val host = Host("127.0.0.1", 8090)
 
-    val done = flatMapEx(system, host)
-    // val done = flatMapPaperEx(system, host)
+    val done = flatMapPaperEx(system, host)
 
     val res = Await.result(done, 60.seconds)
     println(s"Result: ${res.take(30)}")
-
 
     system.waitUntilAllClosed()
   }

@@ -166,8 +166,8 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
               try {
                 val res = fun(value.asInstanceOf[t])
                 val newSilo = new LocalSilo[s](res)
-                cacheMap += (n -> newSilo)
                 if (cache) {
+                  cacheMap += (n -> newSilo)
                   val msg = OKCreated(n.refId)
                 } else {
                   val msg = ForceResponse(newSilo)
@@ -192,8 +192,8 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
                 val res = resSilo.send()
                 res.map { case data =>
                   val newSilo = new LocalSilo[s](data)
-                  cacheMap += (n -> newSilo)
                   if (cache) {
+                    cacheMap += (n -> newSilo)
                     val msg = OKCreated(n.refId)
                   } else {
                     val msg = ForceResponse(newSilo)
