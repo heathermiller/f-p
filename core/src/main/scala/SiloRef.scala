@@ -29,9 +29,6 @@ trait SiloRef[T] {
   def apply[S](fun: Spore[T, S])
   (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S]
 
-  def pumpTo[V, R <: Traversable[V], P <: Spore2[T, Emitter[V], Unit]](destSilo: SiloRef[R])(fun: P)
-    (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = ???
-
   def send(): Future[T]
 
   def cache(): Future[SiloRef[T]]
@@ -42,6 +39,14 @@ trait SiloRef[T] {
   def id: SiloRefId
 
   def host: Host
+
+  def elems[W](implicit ev: T <:< Traversable[W]): ElemsSiloRef[W, T]
+}
+
+trait ElemsSiloRef[W, T] {
+
+  def pumpTo[V, R <: Traversable[V], P <: Spore2[W, Emitter[V], Unit]](destSilo: SiloRef[R])(fun: P)
+    (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit
 }
 
 final case class Host(address: String, port: Int)

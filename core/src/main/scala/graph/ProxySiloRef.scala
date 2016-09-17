@@ -16,25 +16,19 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import Picklers._
 
 
-// final case class PumpToInput[T <: Traversable[U], U, V, R <: Traversable[_], P <: Spore2[U, Emitter[V], Unit]](from: ProxySiloRef[U, T], fun: P, pickler: Pickler[P], unpickler: Unpickler[P], bf: BuilderFactory[V, R])
+final case class PumpToInput[T, U, V, R, P <: Spore2[U, Emitter[V], Unit]](from: ProxySiloRef[T], fun: P, pickler: Pickler[P], unpickler: Unpickler[P], bf: BuilderFactory[V, R])
 
 // IDEA: create ref ids immediately, as well as emitter ids
 abstract class ProxySiloRef[T](refId: Int, val host: Host)(implicit system: SiloSystemInternal) extends SiloRef[T] {
 
   override def apply[S](g: Spore[T, S])
-                                    (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S] = {
+                       (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S] = {
     val newRefId = system.refIds.incrementAndGet()
     val host = system.location(refId)
     println(s"apply: register location of $newRefId: $host")
     system.location += (newRefId -> host)
     new ApplySiloRef[T, S](this, newRefId, g, pickler, unpickler)
   }
-
-  // override def pumpTo[R, P <: Spore2[W, Emitter[V], Unit]](destSilo: SiloRef[V, R])(fun: P)
-  //                                            (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = {
-  //   // register `this` SiloRef as pump input for `destSilo`
-  //   destSilo.asInstanceOf[ProxySiloRef[V, R]].addInput(PumpToInput(this, fun, pickler, unpickler, bf))
-  // }
 
   private def materialize(cache: Boolean): Future[T] = {
     // 1. build graph
@@ -71,12 +65,23 @@ abstract class ProxySiloRef[T](refId: Int, val host: Host)(implicit system: Silo
 
   def node(): Node
 
-  // protected var inputs = List[PumpToInput[_, _, _, T, _]]()
+  protected var inputs = List[PumpToInput[_, _, _, T, _]]()
 
-  // def addInput[S <: Traversable[U], U, V](input: PumpToInput[S, U, V, T, _]): Unit = {
-  //   inputs ::= input
-  // }
+  def addInput[S, U, V](input: PumpToInput[S, U, V, T, _]): Unit = {
+    inputs ::= input
+  }
 
+  def elems[W](implicit ev: T <:< Traversable[W]): ElemsProxySiloRef[W, T] =
+    new ElemsProxySiloRef[W, T](this)
+}
+
+class ElemsProxySiloRef[W, T](ref: ProxySiloRef[T]) extends ElemsSiloRef[W, T] {
+
+  override def pumpTo[V, R <: Traversable[V], P <: Spore2[W, Emitter[V], Unit]](destSilo: SiloRef[R])(fun: P)
+    (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = {
+    // register `this` SiloRef as pump input for `destSilo`
+    destSilo.asInstanceOf[ProxySiloRef[R]].addInput[T, W, V](PumpToInput(ref, fun, pickler, unpickler, bf))
+  }
 }
 
 class ApplySiloRef[S, T]
@@ -109,15 +114,15 @@ class MaterializedSiloRef[T](val refId: Int, host: Host)(implicit system: SiloSy
   }
 }
 
-// // created by SystemImpl.emptySilo
-// class EmptySiloRef[T](val refId: Int, host: Host)(implicit system: SiloSystemInternal) extends ProxySiloRef[T](refId, host) {
-//   val emitterId = system.emitterIds.incrementAndGet()
-//   def node(): Node = {
-//     val nodeInputs = inputs.map { case pumpToInput: PumpToInput[s, u, v, T, p] =>
-//       val fromNode = pumpToInput.from.node()
-//       println(s"empty silo $refId has input ${fromNode.refId}")
-//       PumpNodeInput[u, v, T, p](fromNode, pumpToInput.from.host, pumpToInput.fun.asInstanceOf[p], pumpToInput.pickler.asInstanceOf[Pickler[p]], pumpToInput.unpickler.asInstanceOf[Unpickler[p]], pumpToInput.bf)
-//     }
-//     new MultiInput(nodeInputs, refId, host, emitterId)
-//   }
-// }
+// created by SystemImpl.emptySilo
+class EmptySiloRef[T](val refId: Int, host: Host)(implicit system: SiloSystemInternal) extends ProxySiloRef[T](refId, host) {
+  val emitterId = system.emitterIds.incrementAndGet()
+  def node(): Node = {
+    val nodeInputs = inputs.map { case pumpToInput: PumpToInput[s, u, v, T, p] =>
+      val fromNode = pumpToInput.from.node()
+      println(s"empty silo $refId has input ${fromNode.refId}")
+      PumpNodeInput[u, v, T, p](fromNode, pumpToInput.from.host, pumpToInput.fun.asInstanceOf[p], pumpToInput.pickler.asInstanceOf[Pickler[p]], pumpToInput.unpickler.asInstanceOf[Unpickler[p]], pumpToInput.bf)
+    }
+    new MultiInput(nodeInputs, refId, host, emitterId)
+  }
+}

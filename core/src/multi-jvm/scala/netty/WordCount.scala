@@ -35,7 +35,7 @@ object WordCountMultiJvmNode3 {
     words(index)
   }
 
-  def populateSilo(numLines: Int, random: Random): LocalSilo[String, List[String]] = {
+  def populateSilo(numLines: Int, random: Random): LocalSilo[List[String]] = {
     // each string is a concatenation of 10 random words, separated by space
     val buffer = ListBuffer[String]()
     val lines = for (i <- 0 until numLines) yield {
@@ -57,12 +57,12 @@ object WordCountMultiJvmNode3 {
     val host1 = Host("127.0.0.1", 8091)
     val host2 = Host("127.0.0.1", 8092)
 
-    val silo1Fut = system.fromFun(host1)(() => populateSilo(10, new Random(100)))
-    val silo2Fut = system.fromFun(host2)(() => populateSilo(10, new Random(200)))
+    val silo1Fut = system.fromFun(host1)(spore { (x: Unit) => populateSilo(10, new Random(100)) })
+    val silo2Fut = system.fromFun(host2)(spore { (x: Unit) => populateSilo(10, new Random(200)) })
 
-    val reducedPairs: SiloRef[String, List[String]] => SiloRef[(String, Int), List[(String, Int)]] =
-      { (silo: SiloRef[String, List[String]]) =>
-        val simplePairs = silo.apply[(String, Int), List[(String, Int)]](spore { (lines: List[String]) =>
+    val reducedPairs: SiloRef[List[String]] => SiloRef[List[(String, Int)]] =
+      { (silo: SiloRef[List[String]]) =>
+        val simplePairs = silo.apply[List[(String, Int)]](spore { (lines: List[String]) =>
           lines.flatMap { line =>
             val words = line.split(' ')
             for (word <- words) yield (word, 1)
@@ -70,19 +70,19 @@ object WordCountMultiJvmNode3 {
         })
 
         // insert into map, reduce by key
-        simplePairs.apply[(String, Int), List[(String, Int)]](spore { (pairs: List[(String, Int)]) =>
+        simplePairs.apply[List[(String, Int)]](spore { (pairs: List[(String, Int)]) =>
           val m = pairs.groupBy(pair => pair._1)
           val resMap = m.mapValues(l => l.size)
           resMap.toList
         })
       }
 
-    val target = system.emptySilo[(String, Int), List[(String, Int)]](host1)
+    val target = system.emptySilo[List[(String, Int)]](host1)
 
     val res1Fut = silo1Fut.flatMap { silo =>
       val tmp = reducedPairs(silo)
       val s = spore { (elem: (String, Int), emit: Emitter[(String, Int)]) => emit.emit(elem) }
-      tmp.pumpTo(target)(s)
+      tmp.elems[(String, Int)].pumpTo[(String, Int), List[(String, Int)], Spore2[(String, Int),Emitter[(String, Int)],Unit]](target)(s)
       tmp.send()
     }
     val res1 = Await.result(res1Fut, 5.seconds)
@@ -93,13 +93,13 @@ object WordCountMultiJvmNode3 {
     val res2Fut = silo2Fut.flatMap { silo =>
       val tmp = reducedPairs(silo)
       val s = spore { (elem: (String, Int), emit: Emitter[(String, Int)]) => emit.emit(elem) }
-      tmp.pumpTo(target)(s)
+      tmp.elems[(String, Int)].pumpTo[(String, Int), List[(String, Int)], Spore2[(String, Int),Emitter[(String, Int)],Unit]](target)(s)
       tmp.send()
     }
     val res2 = Await.result(res2Fut, 5.seconds)
     println(s"res2: $res2")
 
-    val finalSilo = target.apply[(String, Int), List[(String, Int)]](spore { (pairs: List[(String, Int)]) =>
+    val finalSilo = target.apply[List[(String, Int)]](spore { (pairs: List[(String, Int)]) =>
       val m = pairs.groupBy(pair => pair._1)
       val resMap = m.mapValues { l =>
         val tmp = l.map(elem => elem._2)
