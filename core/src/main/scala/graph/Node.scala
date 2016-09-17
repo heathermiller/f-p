@@ -22,16 +22,16 @@ final case class Apply[T, S]
 final case class FMapped[T, S]
   (input: Node, refId: Int, fun: Spore[T, SiloRef[S]], pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]) extends Node
 
-// final case class MultiInput[R](inputs: Seq[PumpNodeInput[_, _, R, _]], refId: Int, destHost: Host, emitterId: Int) extends Node
+final case class MultiInput[R](inputs: Seq[PumpNodeInput[_, _, R, _]], refId: Int, destHost: Host, emitterId: Int) extends Node
 
-// final case class PumpNodeInput[U, V, R, P](from: Node, fromHost: Host, fun: P,
-//   pickler: Pickler[P], unpickler: Unpickler[P], bf: BuilderFactory[V, R])
+final case class PumpNodeInput[U, V, R, P](from: Node, fromHost: Host, fun: P,
+  pickler: Pickler[P], unpickler: Unpickler[P], bf: BuilderFactory[V, R])
 
 // remote message
 final case class Graph(node: Node, cache: Boolean) extends ReplyMessage
 
 sealed abstract class Command
 // remote message
-// case class DoPumpTo[A, B, P](node: Node, fun: P, pickler: Pickler[P], unpickler: Unpickler[P], emitterId: Int, destHost: Host, destRefId: Int) extends Command
+case class DoPumpTo[A, B, P](node: Node, fun: P, pickler: Pickler[P], unpickler: Unpickler[P], emitterId: Int, destHost: Host, destRefId: Int) extends Command
 
 case class CommandEnvelope(cmd: Command)

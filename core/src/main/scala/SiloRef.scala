@@ -29,6 +29,9 @@ trait SiloRef[T] {
   def apply[S](fun: Spore[T, S])
   (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S]
 
+  def pumpTo[V, R <: Traversable[V], P <: Spore2[T, Emitter[V], Unit]](destSilo: SiloRef[R])(fun: P)
+    (implicit bf: BuilderFactory[V, R], pickler: Pickler[P], unpickler: Unpickler[P]): Unit = ???
+
   def send(): Future[T]
 
   def cache(): Future[SiloRef[T]]
@@ -59,5 +62,16 @@ class LocalSilo[T](private[silt] val value: T) {
   def send(): Future[T] = {
     Future.successful(value)
   }
+
+  def doPumpTo[A, B](existFun: Function2[A, Emitter[B], Unit], emitter: Emitter[B]): Unit = {
+    // val fun = existFun.asInstanceOf[Function2[U, Emitter[B], Unit]]
+    // Future {
+    //   value.foreach { elem =>
+    //     // println(s"visiting element $elem")
+    //     fun(elem, emitter)
+    //   }
+    //   emitter.done()
+    // }
+}
 
 }
