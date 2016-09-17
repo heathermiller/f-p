@@ -139,8 +139,8 @@ object KnnDigit {
     val cwd = new java.io.File(".").getCanonicalPath
     println(s"Current dir = ${cwd}")
 
-    val trainPath = "../data/train.csv"
-    val testPath = "../data/test.csv"
+    val trainPath = "data/train.csv"
+    val testPath = "data/test.csv"
 
     val training = TrainingImage.parse(trainPath)
     val tests = Image.parse(testPath)
