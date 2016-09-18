@@ -178,10 +178,10 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
             println(s"yay: input graph is materialized")
             val res = fun(value.asInstanceOf[t])
             val newSilo = new LocalSilo[v, s](res)
-            promise.success(newSilo)
+            promise.trySuccess(newSilo)
             println(s"responding to ${localSender.path.name}")
             localSender ! ForceResponse(res)
-            resetPromise(app.refId)
+            resetPromise(app.input.refId)
           }
 
         case fm: FMapped[u, t, v, s] =>
@@ -195,7 +195,7 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
               val newSilo = new LocalSilo[v, s](data)
               promise.success(newSilo)
               localSender ! ForceResponse(data)
-              resetPromise(fm.refId)
+              resetPromise(fm.input.refId)
             }
           }
 
@@ -237,7 +237,6 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
                 s ! ForceResponse(silo.value)
               }
           }
-          resetPromise(refId)
       }
 
     // case class DoPumpTo[A, B](node: Node, fun: (A, Emitter[B]) => Unit, emitterId: Int, destHost: Host, destRefId: Int)
