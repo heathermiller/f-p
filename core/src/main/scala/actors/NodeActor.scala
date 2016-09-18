@@ -19,6 +19,7 @@ import graph.Picklers._
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Success, Failure}
 
 import scala.collection.mutable
 import scala.collection.concurrent.TrieMap
@@ -171,13 +172,26 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
           val fun = app.fun
           val promise = getOrElseInitPromise(app.refId)
           val localSender = sender
-          (self ? Graph(app.input)).map { case ForceResponse(value) =>
-            println(s"yay: input graph is materialized")
-            val res = fun(value.asInstanceOf[t])
-            val newSilo = new LocalSilo[v, s](res)
-            promise.success(newSilo)
-            println(s"responding to ${localSender.path.name}")
-            localSender ! ForceResponse(res)
+
+          var done = false
+          if (promise.isCompleted) {
+            promise.future.value.get match {
+              case Success(silo) =>
+                localSender ! ForceResponse(silo.value)
+                done = true
+              case Failure(t) => /* do nothing */
+            }
+          }
+
+          if (!done) {
+            (self ? Graph(app.input)).map { case ForceResponse(value) =>
+              println(s"yay: input graph is materialized")
+              val res = fun(value.asInstanceOf[t])
+              val newSilo = new LocalSilo[v, s](res)
+              promise.trySuccess(newSilo)
+              println(s"responding to ${localSender.path.name}")
+              localSender ! ForceResponse(res)
+            }
           }
 
         case fm: FMapped[u, t, v, s] =>
