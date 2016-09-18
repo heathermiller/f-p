@@ -44,33 +44,6 @@ class ActorsBackendTest {
   }
 
   @Test
-  def applyTwice(): Unit = {
-    val system = new SystemImpl
-    val host = Host("127.0.0.1", 8090)
-    val fut = system.fromClass[Int, List[Int]](classOf[MySiloFactory], host)
-
-    val done = fut.flatMap { siloref =>
-      val siloref2 = siloref.apply[Int, List[Int]](spore { data =>
-        data.map(x => x)
-      })
-
-      val siloref3 = siloref2.apply[String, List[String]](spore { data =>
-        data.map(x => s"[$x]")
-      })
-      val siloref4 = siloref2.apply[String, List[String]](spore { data =>
-        data.map(x => s"[$x]")
-      })
-
-      siloref3.send().zip(siloref4.send())
-    }
-
-    val res = Await.result(done, 5.seconds)
-    system.waitUntilAllClosed()
-    println(s"result: $res")
-    assert(res.toString == "(List([4], [3], [2]),List([4], [3], [2]))")
-  }
-
-  @Test
   def pumpTo(): Unit = {
     val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)
