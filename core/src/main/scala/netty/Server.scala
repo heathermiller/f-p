@@ -32,7 +32,7 @@ class Server(hostname: String, port: Int, system: SystemImpl) extends AnyRef wit
     receptorThread.start()
 
     try {
-     val b = new ServerBootstrap
+      val b = new ServerBootstrap
       b.group(bossGroup, workerGroup)
        .channel(classOf[NioServerSocketChannel])
        .childHandler(new ChannelInitializer[SocketChannel]() {

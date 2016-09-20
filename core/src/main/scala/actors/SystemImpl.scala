@@ -2,8 +2,6 @@ package silt
 package actors
 
 import scala.pickling._
-import Defaults._
-import binary._
 
 import akka.actor.{Actor, ActorSystem, Props, Terminated}
 import akka.util.Timeout
@@ -18,40 +16,49 @@ import java.util.concurrent.atomic.AtomicInteger
 import graph._
 
 
-case object Terminate
+sealed trait ActorMessage
 
-case object StartNodeActors
+case class Terminate() extends ActorMessage
 
-case object NodeActorsStarted
+case class StartNodeActors(val actorsNumbers: Int) extends ActorMessage
+
+case class NodeActorsStarted() extends ActorMessage
+
+case class ChangePort(val port: Int) extends ActorMessage
 
 /** Supervisor of all NodeActors.
  */
 class SystemActor(system: SiloSystemInternal) extends Actor {
 
+  var port = 8090
+
   val waitingForTermination = Promise[Boolean]()
   var started = false
 
   def receive = {
-    case StartNodeActors =>
-      if (started) sender ! NodeActorsStarted
+    case ChangePort(n) =>
+      port = n
+    case StartNodeActors(n) =>
+      if (started) sender ! NodeActorsStarted()
       else {
         // create node actors, put into config
-        for (i <- 0 to 3) {
+        for (i <- 0 to n) {
           val nodeActor = context.actorOf(Props(new NodeActor(system)))
           context.watch(nodeActor)
-          Config.m += (Host("127.0.0.1", 8090 + i) -> nodeActor)
-          println(s"added node actor ${nodeActor.path.name}")
+          Config.m += (Host("127.0.0.1", port + i) -> nodeActor)
+          println(s"added node actor ${nodeActor.path}")
         }
         started = true
-        sender ! NodeActorsStarted
+        sender ! NodeActorsStarted()
       }
 
-    case Terminate => // stop all NodeActors
+    case Terminate() => // stop all NodeActors
       val s = sender
+      println("Terminating..")
       waitingForTermination.future.foreach(x => s ! "Done")
       Config.m.values.foreach { nodeActor =>
         println(s"stopping node actor ${nodeActor.path.name}")
-        nodeActor ! Terminate
+        nodeActor ! Terminate()
       }
 
     case Terminated(from) =>
@@ -66,7 +73,7 @@ class SystemActor(system: SiloSystemInternal) extends Actor {
             waitingForTermination.success(true)
             context.stop(self)
           }
-      }      
+      }
   }
 }
 
@@ -80,11 +87,19 @@ class SystemImpl extends SiloSystem with SiloSystemInternal {
   private implicit val timeout: Timeout = 300.seconds
 
   def start(): Future[Boolean] = {
-    (systemActor ? StartNodeActors).map { x => true }
+    start(3)
   }
 
-  def initRequest[U, T <: Traversable[U], V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[U, T]] =
-    (systemActor ? StartNodeActors).flatMap { x =>
+  def start(numAct: Int): Future[Boolean] = {
+    (systemActor ? StartNodeActors(numAct)).map { x => true }
+  }
+
+  def changePort(port: Int): Unit = {
+    systemActor ? ChangePort(port)
+  }
+
+  def initRequest[T, V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[T]] = {
+    (systemActor ? StartNodeActors(3)).flatMap { x =>
       val nodeActor    = Config.m(host)
       val refId        = refIds.incrementAndGet()
       val initSilo     = mkMsg(refId)
@@ -93,19 +108,27 @@ class SystemImpl extends SiloSystem with SiloSystemInternal {
       (nodeActor ? initSilo).map { x =>
         println("SystemImpl: got response for InitSilo msg")
         // create a typed wrapper
-        new MaterializedSiloRef[U, T](refId, host)(this)
+        new MaterializedSiloRef[T](refId, host)(this)
       }
     }
+  }
 
   def waitUntilAllClosed(): Unit = {
-    val done = systemActor ? Terminate
-    Await.ready(done, 300.seconds)
+    val tm = implicitly[Timeout]
+    waitUntilAllClosed(tm.duration, tm.duration)
+  }
+
+  def waitUntilAllClosed(nodeTimeout: FiniteDuration, systemTimeout: FiniteDuration): Unit = {
+    val done = (systemActor ? Terminate())(Timeout(nodeTimeout))
+    Await.ready(done, systemTimeout)
     actorSystem.shutdown()
   }
 
   def send[T <: ReplyMessage : Pickler](host: Host, msg: T): Future[Any] = {
     val nodeActor = Config.m(host)
     println(s"found node actor ${nodeActor.path.name}")
-    (nodeActor ? msg).map { case ForceResponse(value) => value }
+    (nodeActor ? msg).map {
+      case ForceResponse(value) => value
+      case OKCreated(_) => }
   }
 }

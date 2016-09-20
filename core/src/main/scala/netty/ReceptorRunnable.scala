@@ -33,17 +33,17 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
   def systemImpl = system
 
   // maps SiloRef refIds to promises of local silo instances
-  private val promiseOf: mutable.Map[Int, Promise[LocalSilo[_, _]]] = new TrieMap[Int, Promise[LocalSilo[_, _]]]
+  private val promiseOf: mutable.Map[Int, Promise[LocalSilo[_]]] = new TrieMap[Int, Promise[LocalSilo[_]]]
 
   //TODO: do we need to use TrieMap here?
   private val builderOfEmitterId: mutable.Map[Int, (AbstractBuilder, Int, Int)] = new TrieMap[Int, (AbstractBuilder, Int, Int)]
 
   val numPickled = new AtomicInteger(0)
 
-  private def getOrElseInitPromise(id: Int): Promise[LocalSilo[_, _]] = promiseOf.get(id) match {
+  private def getOrElseInitPromise(id: Int): Promise[LocalSilo[_]] = promiseOf.get(id) match {
     case None =>
       println("no promise found")
-      val newPromise = Promise[LocalSilo[_, _]]()
+      val newPromise = Promise[LocalSilo[_]]()
       promiseOf += (id -> newPromise)
       newPromise
     case Some(promise) =>
@@ -117,18 +117,9 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         system.location += (refId -> host)
         val promise = getOrElseInitPromise(refId)
         Future {
-          try {
-            val newSilo = fun ()
-            promise.success(newSilo)
-            println(s"SERVER: created $newSilo (${newSilo.value}). responding...")
-          } catch {
-            case e : Throwable =>
-              promise.failure(e)
-              val replyMsg = ForceError(e)
-              replyMsg.id = theMsg.id
-              resultPromise.success(Some(replyMsg))
-              return
-          }
+          val newSilo = fun()
+          promise.success(newSilo)
+          println(s"SERVER: created $newSilo (${newSilo.value}). responding...")
           val replyMsg = OKCreated(refId)
           replyMsg.id = theMsg.id
           resultPromise.success(Some(replyMsg))
@@ -146,7 +137,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         println(s"SERVER: created instance $inst")
 
         inst match {
-          case factory: SiloFactory[u, t] =>
+          case factory: SiloFactory[t] =>
             val silo = factory.data // COMPUTE-INTENSIVE
             promise.success(silo)
 
@@ -163,7 +154,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         }
 
       // TODO: remove if unused
-      case theMsg: ApplyMessage[u, a, v, b] =>
+      case theMsg: ApplyMessage[a, b] =>
         val name    = theMsg.refId
         val fun     = theMsg.fun
         val newName = theMsg.newRefId
@@ -182,7 +173,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         // }
 
         // newDS is guaranteed to be local
-        val newDS = theDS.internalApply[a, v, b](fun)
+        val newDS = theDS.internalApply[a, b](fun)
         println(s"SERVER: value of new DS: ${newDS.value}")
         system.localSiloRefOf += (newName -> newDS)
         resultPromise.success(None)
@@ -197,17 +188,17 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         replyMsg.id = theMsg.id
         resultPromise.success(Some(replyMsg))
 
-      case msg @ Graph(n) =>
+      case msg @ Graph(n, cached) =>
         println(s"SERVER: received graph with node $n")
         n match { // in each case complete `resultPromise` with ForceResponse(value)
           case m: Materialized =>
-            promiseOf(m.refId).future.foreach { (silo: LocalSilo[_, _]) =>
+            promiseOf(m.refId).future.foreach { (silo: LocalSilo[_]) =>
               val replyMsg = ForceResponse(silo.value)
               replyMsg.id = msg.id
               resultPromise.success(Some(replyMsg))
             }
 
-          case app: Apply[u, t, v, s] =>
+          case app: Apply[t, s] =>
             val fun = app.fun
             val promise = getOrElseInitPromise(app.refId)
 
@@ -217,12 +208,12 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
             } else {
               val inputPromise = Promise[Option[Any]]()
               // println("handling Apply, app.input: " + app.input)
-              val localMsg = new HandleIncomingLocal(Graph(app.input), ctx, inputPromise)
+              val localMsg = new HandleIncomingLocal(Graph(app.input, false), ctx, inputPromise)
               queue.add(localMsg)
               inputPromise.future.foreach { case Some(ForceResponse(value)) =>
                 // println(s"yay: input graph is materialized")
                 val res = fun(value.asInstanceOf[t])
-                val newSilo = new LocalSilo[v, s](res)
+                val newSilo = new LocalSilo[s](res)
                 promise.success(newSilo)
                 resultPromise.success(Some(ForceResponse(res)))
               }
@@ -260,7 +251,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
                   }
                 }
                 // register completion for responding with ForceResponse
-                promise.future.foreach { (silo: LocalSilo[_, _]) =>
+                promise.future.foreach { (silo: LocalSilo[_]) =>
                   resultPromise.success(Some(ForceResponse(silo.value)))
                 }
             }
@@ -290,7 +281,7 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
         // kick off materialization
         println(s"NODE ${node.refId}: kick off materialization by sending Graph($node)")
         // self ! Graph(node)
-        val localMsg = new HandleIncomingLocal(Graph(node), ctx, Promise[Option[Any]]())
+        val localMsg = new HandleIncomingLocal(Graph(node, false), ctx, Promise[Option[Any]]())
         queue.add(localMsg)
 
       case Emit(emitterId, destRefId, ba) =>

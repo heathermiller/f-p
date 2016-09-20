@@ -23,7 +23,7 @@ trait SendUtils {
     val tag     = pickler.tag
     println(s"tag: ${tag.key}")
 
-    if (msg.isInstanceOf[graph.Graph] || msg.isInstanceOf[InitSiloFun[_, _]]) {
+    if (msg.isInstanceOf[graph.Graph] || msg.isInstanceOf[InitSiloFun[_]]) {
       import json.pickleFormat
       val builder = pickleFormat.createBuilder()
       builder.hintTag(tag)

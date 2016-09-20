@@ -1,5 +1,7 @@
 package silt
 
+import scala.spores._
+
 
 ////////////////////////////////
 // commands to server
@@ -12,11 +14,11 @@ abstract class ReplyMessage {
 // that way we can cast the data to T before operating on it.
 case class InitSilo(fqcn: String, refId: Int) extends ReplyMessage
 
-case class InitSiloFun[U, T <: Traversable[U]](fun: () => LocalSilo[U, T], refId: Int) extends ReplyMessage
+case class InitSiloFun[T](fun: Spore[Unit, LocalSilo[T]], refId: Int) extends ReplyMessage
 
 case class OKCreated(refId: Int) extends ReplyMessage
 
-case class ApplyMessage[U, A <: Traversable[U], V, B <: Traversable[V]](refId: Int, fun: A => B, newRefId: Int)
+case class ApplyMessage[A, B](refId: Int, fun: A => B, newRefId: Int)
 
 case class ForceMessage(refId: Int) extends ReplyMessage
 

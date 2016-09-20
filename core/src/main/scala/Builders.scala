@@ -15,7 +15,7 @@ trait AbstractBuilder {
 
   def += (elem: Elem): this.type // required, since we don't have type params!
   def result(): Coll
-  def resultSilo(): LocalSilo[Elem, Coll]
+  def resultSilo(): LocalSilo[Coll]
 }
 
 class ListBuilder[T] extends AbstractBuilder {
@@ -32,7 +32,7 @@ class ListBuilder[T] extends AbstractBuilder {
   def result(): List[T] =
     buffer.result()
 
-  def resultSilo(): LocalSilo[T, List[T]] =
+  def resultSilo(): LocalSilo[List[T]] =
     new LocalSilo(buffer.result())
 }
 

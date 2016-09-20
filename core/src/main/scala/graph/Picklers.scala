@@ -28,13 +28,13 @@ object Picklers {
           val tag = node match {
             case m: Materialized =>
               implicitly[FastTypeTag[Materialized]]
-            case a: Apply[u, t, v, s] =>
+            case a: Apply[t, s] =>
               // need to pickle the erased type in this case
               FastTypeTag.mkRaw(a.getClass, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
             case mi: MultiInput[r] =>
               // need to pickle the erased type in this case
               FastTypeTag.mkRaw(mi.getClass, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
-            case fm: FMapped[u, t, v, s] =>
+            case fm: FMapped[t, s] =>
               FastTypeTag.mkRaw(fm.getClass, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
           }
           b.hintTag(tag)
@@ -133,17 +133,22 @@ object Picklers {
         val tag = node match {
           case m: Materialized =>
             implicitly[FastTypeTag[Materialized]]
-          case a: Apply[u, t, v, s] =>
+          case a: Apply[t, s] =>
             // need to pickle the erased type in this case
             FastTypeTag.mkRaw(a.getClass, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
           case mi: MultiInput[r] =>
             // need to pickle the erased type in this case
             FastTypeTag.mkRaw(mi.getClass, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
-          case fm: FMapped[u, t, v, s] =>
+          case fm: FMapped[t, s] =>
             FastTypeTag.mkRaw(fm.getClass, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
         }
         b.hintTag(tag)
         NodePU.pickle(node, b)
+      })
+      builder.putField("cache", { b =>
+        val tag = implicitly[FastTypeTag[Boolean]]
+        b.hintTag(tag)
+        scala.pickling.pickler.AllPicklers.booleanPickler.pickle(picklee.cache, b)
       })
       builder.endEntry()
     }
@@ -156,7 +161,12 @@ object Picklers {
       println(s"GraphPU: unpickle, tag: $tag, tag1: $tag1")
       val node = NodePU.unpickle(tag1, reader1).asInstanceOf[Node]
       reader1.endEntry()
-      Graph(node)
+
+      val reader2 = reader.readField("cache")
+      val tag2 = reader2.beginEntry()
+      val cache = scala.pickling.pickler.AllPicklers.booleanPickler.unpickle(tag2, reader2).asInstanceOf[Boolean]
+      reader2.endEntry()
+      Graph(node, cache)
     }
   }
 
@@ -185,7 +195,7 @@ object Picklers {
       CommandEnvelope(cmd)
     }
   }
-   
+
   implicit object CommandPU extends Pickler[Command] with Unpickler[Command] {
     def tag = implicitly[FastTypeTag[Command]]
     def pickle(picklee: Command, builder: PBuilder): Unit = picklee match {
@@ -204,24 +214,20 @@ object Picklers {
     def pickle(picklee: Node, builder: PBuilder): Unit = picklee match {
       case m: Materialized =>
         implicitly[Pickler[Materialized]].pickle(m, builder)
-      case a: Apply[u, t, v, s] =>
-        applyPU[u, t, v, s].pickle(a, builder)
-      case mi: MultiInput[r] =>
-        multiInputPU[r].pickle(mi, builder)
-      case fm: FMapped[u, t, v, s] =>
-        fmappedPU[u, t, v, s].pickle(fm, builder)
+      case a: Apply[t, s] =>
+        applyPU[t, s].pickle(a, builder)
+      case fm: FMapped[t, s] =>
+        fmappedPU[t, s].pickle(fm, builder)
     }
 
     def unpickle(tag: String, reader: PReader): Any = {
       println(s"NodePU.unpickle, tag: $tag")
-      if (tag.startsWith("silt.graph.MultiInput")) {
-        multiInputPU[Any].unpickle(tag, reader)
-      } else if (tag.startsWith("silt.graph.Materialized")) {
+      if (tag.startsWith("silt.graph.Materialized")) {
         implicitly[Unpickler[Materialized]].unpickle(tag, reader)
       } else if (tag.startsWith("silt.graph.FMapped")) {
-        fmappedPU[Any, Traversable[Any], Any, Traversable[Any]].unpickle(tag, reader)
+        fmappedPU[Any, Any].unpickle(tag, reader)
       } else if (tag.startsWith("silt.graph.Apply")) {
-        applyPU[Any, Traversable[Any], Any, Traversable[Any]].unpickle(tag, reader)
+        applyPU[Any, Any].unpickle(tag, reader)
       } else {
         throw new Exception(s"Trying to unpickle non-existing node with type string: ${tag}")
       }
@@ -310,17 +316,17 @@ object Picklers {
           case m: Materialized =>
             b.hintTag(implicitly[FastTypeTag[Materialized]])
             implicitly[Pickler[Materialized]].pickle(m, b)
-          case a: Apply[u, t, v, s] =>
+          case a: Apply[t, s] =>
             // need to pickle the erased type in this case
             val clazz = a.getClass
             val tag = FastTypeTag.mkRaw(clazz, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
             b.hintTag(tag)
-            applyPU[u, t, v, s].pickle(a, b)
-          case fm: FMapped[u, t, v, s] =>
+            applyPU[t, s].pickle(a, b)
+          case fm: FMapped[t, s] =>
             val clazz = fm.getClass
             val tag = FastTypeTag.mkRaw(clazz, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
             b.hintTag(tag)
-            fmappedPU[u, t, v, s].pickle(fm, b)
+            fmappedPU[t, s].pickle(fm, b)
           case _ => ???
         }
       })
@@ -408,12 +414,12 @@ object Picklers {
     }
   }
 
-  implicit def applyPU[U, T <: Traversable[U], V, S <: Traversable[V]]:
-    Pickler[Apply[U, T, V, S]] with Unpickler[Apply[U, T, V, S]] = new Pickler[Apply[U, T, V, S]] with Unpickler[Apply[U, T, V, S]] {
+  implicit def applyPU[T, S]:
+    Pickler[Apply[T, S]] with Unpickler[Apply[T, S]] = new Pickler[Apply[T, S]] with Unpickler[Apply[T, S]] {
 
-    def tag: FastTypeTag[Apply[U,T,V,S]] = implicitly[FastTypeTag[Apply[U,T,V,S]]]
+    def tag: FastTypeTag[Apply[T,S]] = implicitly[FastTypeTag[Apply[T,S]]]
 
-    def pickle(picklee: Apply[U, T, V, S], builder: PBuilder): Unit = {
+    def pickle(picklee: Apply[T, S], builder: PBuilder): Unit = {
       // println(s"applyPU: pickling $picklee")
       builder.beginEntry(picklee)
 
@@ -422,23 +428,23 @@ object Picklers {
           case m: Materialized =>
             b.hintTag(implicitly[FastTypeTag[Materialized]])
             implicitly[Pickler[Materialized]].pickle(m, b)
-          case a: Apply[u, t, v, s] =>
+          case a: Apply[t, s] =>
             // need to pickle the erased type in this case
             val clazz = a.getClass
             val tag = FastTypeTag.mkRaw(clazz, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
             b.hintTag(tag)
-            applyPU[u, t, v, s].pickle(a, b)
+            applyPU[t, s].pickle(a, b)
           case mi: MultiInput[r] =>
             // need to pickle the erased type in this case
             val clazz = mi.getClass
             val tag = FastTypeTag.mkRaw(clazz, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
             b.hintTag(tag)
             multiInputPU[r].pickle(mi, b)
-          case fm: FMapped[u, t, v, s] =>
+          case fm: FMapped[t, s] =>
             val clazz = fm.getClass
             val tag = FastTypeTag.mkRaw(clazz, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
             b.hintTag(tag)
-            fmappedPU[u, t, v, s].pickle(fm, b)
+            fmappedPU[t, s].pickle(fm, b)
         }
       })
 
@@ -475,14 +481,12 @@ object Picklers {
       val tag1 = reader1.beginEntry()
       val typeString = tag1
       println(s"applyPU typeString: $typeString")
-      val input = if (typeString.startsWith("silt.graph.MultiInput")) {
-        multiInputPU[Any].unpickle(tag1, reader1)
-      } else if (typeString.startsWith("silt.graph.Materialized")) {
+      val input = if (typeString.startsWith("silt.graph.Materialized")) {
         implicitly[Unpickler[Materialized]].unpickle(tag1, reader1)
       } else if (typeString.startsWith("silt.graph.FMapped")) {
-        fmappedPU[Any, Traversable[Any], Any, Traversable[Any]].unpickle(tag1, reader1)
+        fmappedPU[Any, Any].unpickle(tag1, reader1)
       } else if (typeString.startsWith("silt.graph.Apply")) {
-        applyPU[Any, Traversable[Any], Any, Traversable[Any]].unpickle(tag1, reader1)
+        applyPU[Any, Any].unpickle(tag1, reader1)
       } else {
         throw new Exception(s"Trying to unpickle non-existing node with type string: ${typeString}")
       }
@@ -515,16 +519,16 @@ object Picklers {
       reader5.endEntry()
       val unpickler = Unsafe.instance.allocateInstance(Class.forName(unpicklerClassName)).asInstanceOf[Unpickler[Spore[T, S]]]
 
-      Apply[U, T, V, S](input.asInstanceOf[Node], refId.asInstanceOf[Int], fun.asInstanceOf[T => S], pickler, unpickler)
+      Apply[T, S](input.asInstanceOf[Node], refId.asInstanceOf[Int], fun.asInstanceOf[Spore[T, S]], pickler, unpickler)
     }
   }
 
-  implicit def fmappedPU[U, T <: Traversable[U], V, S <: Traversable[V]]:
-      Pickler[FMapped[U, T, V, S]] with Unpickler[FMapped[U, T, V, S]] = new Pickler[FMapped[U, T, V, S]] with Unpickler[FMapped[U, T, V, S]] {
+  implicit def fmappedPU[T, S]:
+      Pickler[FMapped[T, S]] with Unpickler[FMapped[T, S]] = new Pickler[FMapped[T, S]] with Unpickler[FMapped[T, S]] {
 
-    def tag: FastTypeTag[FMapped[U, T, V, S]] = implicitly[FastTypeTag[FMapped[U, T, V, S]]]
+    def tag: FastTypeTag[FMapped[T, S]] = implicitly[FastTypeTag[FMapped[T, S]]]
 
-    def pickle(picklee: FMapped[U, T, V, S], builder: PBuilder): Unit = {
+    def pickle(picklee: FMapped[T, S], builder: PBuilder): Unit = {
       builder.beginEntry(picklee)
 
       builder.putField("input", { b =>
@@ -532,23 +536,17 @@ object Picklers {
           case m: Materialized =>
             b.hintTag(implicitly[FastTypeTag[Materialized]])
             implicitly[Pickler[Materialized]].pickle(m, b)
-          case a: Apply[u, t, v, s] =>
+          case a: Apply[t, s] =>
             // need to pickle the erased type in this case
             val clazz = a.getClass
             val tag = FastTypeTag.mkRaw(clazz, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
             b.hintTag(tag)
-            applyPU[u, t, v, s].pickle(a, b)
-          case mi: MultiInput[r] =>
-            // need to pickle the erased type in this case
-            val clazz = mi.getClass
-            val tag = FastTypeTag.mkRaw(clazz, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
-            b.hintTag(tag)
-            multiInputPU[r].pickle(mi, b)
-          case fm: FMapped[u, t, v, s] =>
+            applyPU[t, s].pickle(a, b)
+          case fm: FMapped[t, s] =>
             val clazz = fm.getClass
             val tag = FastTypeTag.mkRaw(clazz, runtime.currentMirror).asInstanceOf[FastTypeTag[Any]]
             b.hintTag(tag)
-            fmappedPU[u, t, v, s].pickle(fm, b)
+            fmappedPU[t, s].pickle(fm, b)
         }
 
         builder.putField("refId", { b =>
@@ -581,14 +579,12 @@ object Picklers {
       val reader1 = reader.readField("input")
       val tag1 = reader.beginEntry()
       val typeString = tag1
-      val input = if (typeString.startsWith("silt.graph.MultiInput")) {
-        multiInputPU[Any].unpickle(tag1, reader1)
-      } else if (typeString.startsWith("silt.graph.Materialized")) {
+      val input = if (typeString.startsWith("silt.graph.Materialized")) {
         implicitly[Unpickler[Materialized]].unpickle(tag1, reader1)
       } else if (typeString.startsWith("silt.graph.FMapped")) {
-        fmappedPU[Any, Traversable[Any], Any, Traversable[Any]].unpickle(tag1, reader1)
+        fmappedPU[Any, Any].unpickle(tag1, reader1)
       } else if (typeString.startsWith("silt.graph.Apply")) {
-        applyPU[Any, Traversable[Any], Any, Traversable[Any]].unpickle(tag1, reader1)
+        applyPU[Any, Any].unpickle(tag1, reader1)
       } else {
         throw new Exception(s"Trying to unpickle non-existing node with type string: ${typeString}")
       }
@@ -612,16 +608,16 @@ object Picklers {
       val tag4 = reader4.beginEntry()
       val picklerClassName = scala.pickling.pickler.AllPicklers.stringPickler.unpickle(tag4, reader4).asInstanceOf[String]
       reader4.endEntry()
-      val pickler = Unsafe.instance.allocateInstance(Class.forName(picklerClassName)).asInstanceOf[Pickler[Spore[T, SiloRef[V, S]]]]
+      val pickler = Unsafe.instance.allocateInstance(Class.forName(picklerClassName)).asInstanceOf[Pickler[Spore[T, SiloRef[S]]]]
 
       val reader5 = reader.readField("unpickler")
       reader5.hintTag(FastTypeTag.String)
       val tag5 = reader5.beginEntry()
       val unpicklerClassName = scala.pickling.pickler.AllPicklers.stringPickler.unpickle(tag5, reader5).asInstanceOf[String]
       reader5.endEntry()
-      val unpickler = Unsafe.instance.allocateInstance(Class.forName(unpicklerClassName)).asInstanceOf[Unpickler[Spore[T, SiloRef[V, S]]]]
+      val unpickler = Unsafe.instance.allocateInstance(Class.forName(unpicklerClassName)).asInstanceOf[Unpickler[Spore[T, SiloRef[S]]]]
 
-      FMapped[U, T, V, S](input.asInstanceOf[Node], refId.asInstanceOf[Int], fun.asInstanceOf[T => SiloRef[V, S]], pickler, unpickler)
+      FMapped[T, S](input.asInstanceOf[Node], refId.asInstanceOf[Int], fun.asInstanceOf[Spore[T, SiloRef[S]]], pickler, unpickler)
     }
   }
 

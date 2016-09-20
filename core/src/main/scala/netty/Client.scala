@@ -60,10 +60,7 @@ abstract class ClientHandler extends ChannelInboundHandlerAdapter with SendUtils
       case theMsg @ ForceResponse(value) =>
         // response to request, so look up promise
         val p = systemImpl.promiseOf(theMsg.id)
-        p.success(theMsg)
-      case theMsg @ ForceError(err) =>
-        val p = systemImpl.promiseOf(theMsg.id)
-        p.failure(err)
+        p.success(theMsg)        
       case _ =>
         /* do nothing */
     }

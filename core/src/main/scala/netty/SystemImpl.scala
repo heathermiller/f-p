@@ -8,6 +8,7 @@ import Defaults._
 import runtime.GlobalRegistry
 import binary._
 
+
 import _root_.io.netty.bootstrap.Bootstrap
 import _root_.io.netty.channel.Channel
 import _root_.io.netty.channel.ChannelInitializer
@@ -24,6 +25,7 @@ import scala.concurrent.{Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Try, Success, Failure}
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 import scala.collection.concurrent.TrieMap
 
 import java.util.concurrent.CountDownLatch
@@ -47,7 +49,7 @@ class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
   val promiseOf: mutable.Map[Int, Promise[Any]] = new TrieMap[Int, Promise[Any]]
 
   // SiloRef map
-  val localSiloRefOf: mutable.Map[Int, LocalSilo[_, _]] = new TrieMap[Int, LocalSilo[_, _]]
+  val localSiloRefOf: mutable.Map[Int, LocalSilo[_]] = new TrieMap[Int, LocalSilo[_]]
 
   val lock = new ReentrantLock
 
@@ -141,7 +143,7 @@ class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
   }
 
   // effects: refIds, seqNum, location
-  def initRequest[U, T <: Traversable[U], V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[U, T]] = {
+  def initRequest[T, V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[T]] = {
     val refId = refIds.incrementAndGet()
     val msg   = mkMsg(refId)
     msg.id    = seqNum.incrementAndGet()
@@ -150,9 +152,11 @@ class SystemImpl extends SiloSystem with SiloSystemInternal with SendUtils {
     send(host, msg).map { x =>
       println("SystemImpl: got response for InitSilo msg")
       // create a typed wrapper
-      new graph.MaterializedSiloRef[U, T](refId, host)(this)
+      new graph.MaterializedSiloRef[T](refId, host)(this)
     }
   }
+
+  def waitUntilAllClosed(tm1: FiniteDuration, tm2: FiniteDuration): Unit = {}
 
   def send[T <: ReplyMessage : Pickler](host: Host, msg: T): Future[Any] =
     talkTo(host).flatMap(channel => sendWithReply(channel, msg).map {

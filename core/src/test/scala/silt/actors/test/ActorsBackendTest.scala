@@ -14,6 +14,13 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 
+class MySiloFactory extends SiloFactory[List[Int]] {
+
+  def data: LocalSilo[List[Int]] =
+    new LocalSilo(List(4, 3, 2))
+
+}
+
 case class Item(s: String)
 
 object ActorsBackendTest {
@@ -27,10 +34,10 @@ class ActorsBackendTest {
   def applyAndSend(): Unit = {
     val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)
-    val fut = system.fromClass[Int, List[Int]](classOf[MySiloFactory], host)
+    val fut = system.fromClass[List[Int]](classOf[MySiloFactory], host)
 
     val done1 = fut.flatMap { siloref =>
-      val siloref2 = siloref.apply[String, List[String]](spore { data =>
+      val siloref2 = siloref.apply[List[String]](spore { data =>
         data.map(x => s"[$x]")
       })
 
@@ -47,13 +54,13 @@ class ActorsBackendTest {
   def pumpTo(): Unit = {
     val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)
-    val fut = system.fromClass[Int, List[Int]](classOf[MySiloFactory], host)
+    val fut = system.fromClass[List[Int]](classOf[MySiloFactory], host)
 
     val done2 = fut.flatMap { siloRef =>
       val dest = Host("127.0.0.1", 8091)
-      val destSilo = system.emptySilo[Item, List[Item]](dest)
+      val destSilo = system.emptySilo[List[Item]](dest)
 
-      siloRef.pumpTo(destSilo)(spore { (elem: Int, emit: Emitter[Item]) =>
+      siloRef.elems[Int].pumpTo[Item, List[Item], Spore2[Int,Emitter[Item],Unit]](destSilo)(spore { (elem: Int, emit: Emitter[Item]) =>
         val i = Item((elem + 10).toString)
         emit.emit(i)
         emit.emit(i)
