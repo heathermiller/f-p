@@ -8,7 +8,6 @@ import Defaults._
 import runtime.GlobalRegistry
 import binary._
 
-
 import _root_.io.netty.bootstrap.Bootstrap
 import _root_.io.netty.channel.Channel
 import _root_.io.netty.channel.ChannelInitializer

@@ -41,7 +41,7 @@ object build extends Build {
         "com.typesafe.akka" % "akka-actor_2.11" % "2.3.12",
         "com.typesafe.scala-logging" %% "scala-logging"   % "3.1.0",
         "ch.qos.logback"              % "logback-classic" % "1.1.3",
-        "junit"        % "junit-dep"       % "4.10" % "test",
+        "junit"        % "junit-dep"       % "4.11" % "test",
         "com.novocode" % "junit-interface" % "0.11" % "test"
       ),
       compile in MultiJvm <<= (compile in MultiJvm) triggeredBy (compile in Test)
