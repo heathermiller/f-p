@@ -125,6 +125,20 @@ final class ReceptorRunnable(queue: BlockingQueue[HandleIncoming], system: Syste
           resultPromise.success(Some(replyMsg))
         }
 
+      case theMsg @ InitSiloValue(value, refId) =>
+        println(s"SERVER: creating silo using a value...")
+
+        system.location += (refId -> host)
+        val promise = getOrElseInitPromise(refId)
+        Future {
+          val newSilo = new LocalSilo(value)
+          promise.success(newSilo)
+          println(s"SERVER: created $newSilo (${newSilo.value}). responding...")
+          val replyMsg = OKCreated(refId)
+          replyMsg.id = theMsg.id
+          resultPromise.success(Some(replyMsg))
+        }
+
       case theMsg @ InitSilo(fqcn, refId) =>
         println(s"SERVER: creating Silo using class $fqcn...")
 

@@ -3,8 +3,23 @@ package silt
 import scala.spores.{Spore, Spore2}
 import scala.pickling.{Pickler, Unpickler}
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Await}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+
+import MessagePicklers._
+
+
+object SiloRef {
+
+  def populate[T](host: Host, value: T)(implicit p: Pickler[InitSiloValue[T]], system: SiloSystem): SiloRef[T] = {
+    val fut = system.asInstanceOf[SiloSystemInternal].initRequest[T, InitSiloValue[T]](host, { (refId: Int) =>
+      InitSiloValue[T](value, refId)
+    })
+    Await.result(fut, 10.seconds)
+  }
+
+}
 
 /** A program operating on data stored in a silo can only do so using a
  *  reference to the silo, a so-called `SiloRef`.
