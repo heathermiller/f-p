@@ -11,7 +11,13 @@ import scala.pickling.shareNothing._
 import scala.spores._
 import SporePickler._
 
-import silt.{SiloSystem, Host, LocalSilo}
+import silt.{SiloSystem, Host, LocalSilo, SiloFactory}
+
+
+class WordsSiloFactory extends SiloFactory[List[String]] {
+  def data =
+    Client.populateSilo(10, new scala.util.Random(100))
+}
 
 object Client {
 
@@ -43,12 +49,10 @@ package!
   }
 
   def main(args: Array[String]): Unit = {
-    val system = SiloSystem()
+    val system = SiloSystem("silt.netty.SystemImpl")
     val host = Host("127.0.0.1", 8090)
 
-    val siloFut = system.fromFun(host)(spore { (x: Unit) =>
-      populateSilo(10, new scala.util.Random(100))
-    })
+    val siloFut = system.fromClass[List[String]](classOf[WordsSiloFactory], host)
     val done = siloFut.flatMap(_.send())
 
     val res = Await.result(done, 15.seconds)

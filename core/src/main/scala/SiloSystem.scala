@@ -12,11 +12,14 @@ import scala.collection.concurrent.TrieMap
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import com.typesafe.scalalogging.{StrictLogging => Logging}
 
-object SiloSystem {
-  def apply(): SiloSystem =
-    new silt.actors.SystemImpl
-    // new silt.netty.SystemImpl
+object SiloSystem extends AnyRef with Logging {
+  def apply(className: String = "silt.actors.SystemImpl"): SiloSystem = {
+    val clazz = sys.props.getOrElse("silo.system.impl", className)
+    logger.info(s"Initializing silo system with `$clazz`")
+    Class.forName(clazz).newInstance().asInstanceOf[SiloSystem]
+  }
 }
 
 trait SiloSystem {
