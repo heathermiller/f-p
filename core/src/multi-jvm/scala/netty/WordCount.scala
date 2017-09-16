@@ -53,12 +53,12 @@ object WordCountMultiJvmNode3 {
   def main(args: Array[String]): Unit = {
     Thread.sleep(1000) // FIXME
 
-    val system = SiloSystem()
+    implicit val system = SiloSystem()
     val host1 = Host("127.0.0.1", 8091)
     val host2 = Host("127.0.0.1", 8092)
 
-    val silo1Fut = system.fromFun(host1)(spore { (x: Unit) => populateSilo(10, new Random(100)) })
-    val silo2Fut = system.fromFun(host2)(spore { (x: Unit) => populateSilo(10, new Random(200)) })
+    val silo1Fut = SiloRef.fromFun(host1)(spore { (x: Unit) => populateSilo(10, new Random(100)) })
+    val silo2Fut = SiloRef.fromFun(host2)(spore { (x: Unit) => populateSilo(10, new Random(200)) })
 
     val reducedPairs: SiloRef[List[String]] => SiloRef[List[(String, Int)]] =
       { (silo: SiloRef[List[String]]) =>

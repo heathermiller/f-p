@@ -19,6 +19,18 @@ object SiloRef {
     Await.result(fut, 10.seconds)
   }
 
+  def fromClass[T](clazz: Class[_], host: Host)(implicit p: Pickler[InitSilo], system: SiloSystem): Future[SiloRef[T]] =
+    system.asInstanceOf[SiloSystemInternal].initRequest[T, InitSilo](host, { (refId: Int) =>
+      println(s"fromClass: register location of $refId")
+      InitSilo(clazz.getName(), refId)
+    })
+
+  def fromFun[T](host: Host)(fun: Spore[Unit, LocalSilo[T]])(implicit p: Pickler[InitSiloFun[T]], system: SiloSystem): Future[SiloRef[T]] =
+    system.asInstanceOf[SiloSystemInternal].initRequest[T, InitSiloFun[T]](host, { (refId: Int) =>
+      println(s"fromFun: register location of $refId")
+      InitSiloFun(fun, refId)
+    })
+
 }
 
 /** A program operating on data stored in a silo can only do so using a

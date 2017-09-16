@@ -11,7 +11,7 @@ import scala.pickling.shareNothing._
 import scala.spores._
 import SporePickler._
 
-import silt.{SiloSystem, Host, LocalSilo, SiloFactory}
+import silt.{SiloSystem, SiloRef, Host, LocalSilo, SiloFactory}
 
 
 class WordsSiloFactory extends SiloFactory[List[String]] {
@@ -49,10 +49,10 @@ package!
   }
 
   def main(args: Array[String]): Unit = {
-    val system = SiloSystem("silt.netty.SystemImpl")
+    implicit val system = SiloSystem("silt.netty.SystemImpl")
     val host = Host("127.0.0.1", 8090)
 
-    val siloFut = system.fromClass[List[String]](classOf[WordsSiloFactory], host)
+    val siloFut = SiloRef.fromClass[List[String]](classOf[WordsSiloFactory], host)
     val done = siloFut.flatMap(_.send())
 
     val res = Await.result(done, 15.seconds)

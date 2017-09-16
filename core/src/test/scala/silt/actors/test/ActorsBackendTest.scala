@@ -32,9 +32,9 @@ class ActorsBackendTest {
 
   @Test
   def applyAndSend(): Unit = {
-    val system = new SystemImpl
+    implicit val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)
-    val fut = system.fromClass[List[Int]](classOf[MySiloFactory], host)
+    val fut = SiloRef.fromClass[List[Int]](classOf[MySiloFactory], host)
 
     val done1 = fut.flatMap { siloref =>
       val siloref2 = siloref.apply[List[String]](spore { data =>
@@ -52,9 +52,9 @@ class ActorsBackendTest {
 
   //@Test
   def pumpTo(): Unit = {
-    val system = new SystemImpl
+    implicit val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)
-    val fut = system.fromClass[List[Int]](classOf[MySiloFactory], host)
+    val fut = SiloRef.fromClass[List[Int]](classOf[MySiloFactory], host)
 
     val done2 = fut.flatMap { siloRef =>
       val dest = Host("127.0.0.1", 8091)
@@ -77,10 +77,10 @@ class ActorsBackendTest {
 
   @Test
   def flatMap(): Unit = {
-    val system = new SystemImpl
+    implicit val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)
-    val fut1 = system.fromClass[List[Int]](classOf[MySiloFactory], host)
-    val fut2 = system.fromClass[List[Int]](classOf[MySiloFactory], host)
+    val fut1 = SiloRef.fromClass[List[Int]](classOf[MySiloFactory], host)
+    val fut2 = SiloRef.fromClass[List[Int]](classOf[MySiloFactory], host)
 
     val done1 = fut1.flatMap { siloref1 =>
       fut2.flatMap { siloref2 =>

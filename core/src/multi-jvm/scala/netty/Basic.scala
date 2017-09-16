@@ -41,9 +41,9 @@ object BasicMultiJvmNode2 {
   def main(args: Array[String]): Unit = {
     Thread.sleep(1000) // FIXME
 
-    val system = SiloSystem()
+    implicit val system = SiloSystem()
     val host = Host("127.0.0.1", 8090)
-    val siloFut: Future[SiloRef[List[Int]]] = system.fromClass[List[Int]](classOf[TestSiloFactory], host)
+    val siloFut: Future[SiloRef[List[Int]]] = SiloRef.fromClass[List[Int]](classOf[TestSiloFactory], host)
 
     val siloFut2 = siloFut.flatMap { (silo: SiloRef[List[Int]]) =>
       silo.send()
@@ -61,12 +61,12 @@ object BasicMultiJvmNode2 {
     assert(res3.toString == "List(41, 31, 21)")
 
     // test handling of InitSiloFun
-    val sourceFut = system.fromFun(host)(spore { (x: Unit) => populateSilo() })
+    val sourceFut = SiloRef.fromFun(host)(spore { (x: Unit) => populateSilo() })
     Await.ready(sourceFut, 5.seconds)
 
     testPumpTo(system, sourceFut, host)
 
-    val sourceFut2 = system.fromFun(host)(spore { (x: Unit) => populateSilo() })
+    val sourceFut2 = SiloRef.fromFun(host)(spore { (x: Unit) => populateSilo() })
     for (_ <- 1 to 10) {
       testPumpTo2(system, sourceFut, sourceFut2, host)
     }

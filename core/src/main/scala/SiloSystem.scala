@@ -25,18 +25,6 @@ object SiloSystem extends AnyRef with Logging {
 trait SiloSystem {
   self: SiloSystemInternal =>
 
-  def fromClass[T](clazz: Class[_], host: Host): Future[SiloRef[T]] =
-    initRequest[T, InitSilo](host, { (refId: Int) =>
-      println(s"fromClass: register location of $refId")
-      InitSilo(clazz.getName(), refId)
-    })
-
-  def fromFun[T](host: Host)(fun: Spore[Unit, LocalSilo[T]])(implicit p: Pickler[InitSiloFun[T]]): Future[SiloRef[T]] =
-    initRequest[T, InitSiloFun[T]](host, { (refId: Int) =>
-      println(s"fromFun: register location of $refId")
-      InitSiloFun(fun, refId)
-    })
-
   // the idea is that empty silos can only be filled using pumpTos.
   // we'll detect issues like trying to fill a silo that's been constructed
   // *not* using pumpTo at runtime (before running the topology, though!)
