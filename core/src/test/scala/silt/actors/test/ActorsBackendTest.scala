@@ -84,7 +84,7 @@ class ActorsBackendTest {
 
     val done1 = fut1.flatMap { siloref1 =>
       fut2.flatMap { siloref2 =>
-        val siloref3 = siloref1.flatMap[List[Int]](spore {
+        val siloref3 = siloref1.apply[List[Int]](spore {
           val localSiloRef = siloref2
           (data: List[Int]) =>
             localSiloRef.map[List[Int]](spore {

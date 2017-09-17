@@ -48,7 +48,7 @@ abstract class ProxySiloRef[T](refId: Int, val host: Host)(implicit system: Silo
     system.send(host, Graph(n, true)).map(x => this)
   }
 
-  override def flatMap[S](fun: Spore[T, SiloRef[S]])
+  override def apply[S](fun: Spore[T, SiloRef[S]])
     (implicit pickler: Pickler[Spore[T, SiloRef[S]]],
       unpickler: Unpickler[Spore[T, SiloRef[S]]]): SiloRef[S] = {
     val newRefId = system.refIds.incrementAndGet()

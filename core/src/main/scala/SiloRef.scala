@@ -61,8 +61,8 @@ trait SiloRef[T] {
 
   def cache(): Future[SiloRef[T]]
 
-  def flatMap[S](fun: Spore[T, SiloRef[S]])
-                (implicit pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]): SiloRef[S]
+  def apply[S](fun: Spore[T, SiloRef[S]])
+              (implicit pickler: Pickler[Spore[T, SiloRef[S]]], unpickler: Unpickler[Spore[T, SiloRef[S]]]): SiloRef[S]
 
   def id: SiloRefId
 
