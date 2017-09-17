@@ -17,8 +17,8 @@ final case class PumpToInput[T, U, V, R, P <: Spore2[U, Emitter[V], Unit]](from:
 // IDEA: create ref ids immediately, as well as emitter ids
 abstract class ProxySiloRef[T](refId: Int, val host: Host)(implicit system: SiloSystemInternal) extends SiloRef[T] {
 
-  override def apply[S](g: Spore[T, S])
-                       (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S] = {
+  override def map[S](g: Spore[T, S])
+                     (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S] = {
     val newRefId = system.refIds.incrementAndGet()
     val host = system.location(refId)
     println(s"apply: register location of $newRefId: $host")

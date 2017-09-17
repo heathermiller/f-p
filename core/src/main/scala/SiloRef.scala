@@ -54,8 +54,8 @@ trait SiloRef[T] {
    *
    *  @param fun the spore to be applied on the data pointed to by this `SiloRef`
    */
-  def apply[S](fun: Spore[T, S])
-              (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S]
+  def map[S](fun: Spore[T, S])
+            (implicit pickler: Pickler[Spore[T, S]], unpickler: Unpickler[Spore[T, S]]): SiloRef[S]
 
   def send(): Future[T]
 

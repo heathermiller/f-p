@@ -37,7 +37,7 @@ class ActorsBackendTest {
     val fut = SiloRef.fromClass[List[Int]](classOf[MySiloFactory], host)
 
     val done1 = fut.flatMap { siloref =>
-      val siloref2 = siloref.apply[List[String]](spore { data =>
+      val siloref2 = siloref.map[List[String]](spore { data =>
         data.map(x => s"[$x]")
       })
 
@@ -87,7 +87,7 @@ class ActorsBackendTest {
         val siloref3 = siloref1.flatMap[List[Int]](spore {
           val localSiloRef = siloref2
           (data: List[Int]) =>
-            localSiloRef.apply[List[Int]](spore {
+            localSiloRef.map[List[Int]](spore {
               val localData = data
               (data2: List[Int]) =>
                 localData ++ data2

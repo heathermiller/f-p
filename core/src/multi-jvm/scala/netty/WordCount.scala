@@ -62,7 +62,7 @@ object WordCountMultiJvmNode3 {
 
     val reducedPairs: SiloRef[List[String]] => SiloRef[List[(String, Int)]] =
       { (silo: SiloRef[List[String]]) =>
-        val simplePairs = silo.apply[List[(String, Int)]](spore { (lines: List[String]) =>
+        val simplePairs = silo.map[List[(String, Int)]](spore { (lines: List[String]) =>
           lines.flatMap { line =>
             val words = line.split(' ')
             for (word <- words) yield (word, 1)
@@ -70,7 +70,7 @@ object WordCountMultiJvmNode3 {
         })
 
         // insert into map, reduce by key
-        simplePairs.apply[List[(String, Int)]](spore { (pairs: List[(String, Int)]) =>
+        simplePairs.map[List[(String, Int)]](spore { (pairs: List[(String, Int)]) =>
           val m = pairs.groupBy(pair => pair._1)
           val resMap = m.mapValues(l => l.size)
           resMap.toList
@@ -99,7 +99,7 @@ object WordCountMultiJvmNode3 {
     val res2 = Await.result(res2Fut, 5.seconds)
     println(s"res2: $res2")
 
-    val finalSilo = target.apply[List[(String, Int)]](spore { (pairs: List[(String, Int)]) =>
+    val finalSilo = target.map[List[(String, Int)]](spore { (pairs: List[(String, Int)]) =>
       val m = pairs.groupBy(pair => pair._1)
       val resMap = m.mapValues { l =>
         val tmp = l.map(elem => elem._2)

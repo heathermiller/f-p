@@ -54,7 +54,7 @@ object BasicMultiJvmNode2 {
     val siloFut3 = siloFut.flatMap { (silo: SiloRef[List[Int]]) =>
       // problem: spore unpickler captures enclosing function
       // --> constructur of spore unpickler class takes fun param!
-      val silo2 = silo.apply[List[Int]](spore { (l: List[Int]) => l.map(_ + 1) })
+      val silo2 = silo.map[List[Int]](spore { (l: List[Int]) => l.map(_ + 1) })
       silo2.send()
     }
     val res3 = Await.result(siloFut3, 5.seconds)
