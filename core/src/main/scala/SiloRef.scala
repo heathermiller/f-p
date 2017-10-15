@@ -12,6 +12,12 @@ import MessagePicklers._
 
 object SiloRef {
 
+  private[silt] val currentHostValue: ThreadLocal[Host] =
+    new ThreadLocal[Host]
+
+  def currentHost: Host =
+    currentHostValue.get()
+
   def populate[T](host: Host, value: T)(implicit p: Pickler[InitSiloValue[T]], system: SiloSystem): SiloRef[T] = {
     val fut = system.asInstanceOf[SiloSystemInternal].initRequest[T, InitSiloValue[T]](host, { (refId: Int) =>
       InitSiloValue[T](value, refId)

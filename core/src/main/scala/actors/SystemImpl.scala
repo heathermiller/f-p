@@ -43,9 +43,10 @@ class SystemActor(system: SiloSystemInternal) extends Actor {
       else {
         // create node actors, put into config
         for (i <- 0 to n) {
-          val nodeActor = context.actorOf(Props(new NodeActor(system)))
+          val host = Host("127.0.0.1", port + i)
+          val nodeActor = context.actorOf(Props(new NodeActor(system, host)))
           context.watch(nodeActor)
-          Config.m += (Host("127.0.0.1", port + i) -> nodeActor)
+          Config.m += (host -> nodeActor)
           println(s"added node actor ${nodeActor.path}")
         }
         started = true
