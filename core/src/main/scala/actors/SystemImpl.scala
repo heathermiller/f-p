@@ -39,7 +39,7 @@ class SystemActor(system: SiloSystemInternal) extends Actor {
     case ChangePort(n) =>
       port = n
     case StartNodeActors(n) =>
-      if (started) sender ! NodeActorsStarted()
+      if (started) sender() ! NodeActorsStarted()
       else {
         // create node actors, put into config
         for (i <- 0 to n) {
@@ -49,7 +49,7 @@ class SystemActor(system: SiloSystemInternal) extends Actor {
           println(s"added node actor ${nodeActor.path}")
         }
         started = true
-        sender ! NodeActorsStarted()
+        sender() ! NodeActorsStarted()
       }
 
     case Terminate() => // stop all NodeActors
@@ -99,14 +99,14 @@ class SystemImpl extends SiloSystem with SiloSystemInternal {
   }
 
   def initRequest[T, V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[T]] = {
-    (systemActor ? StartNodeActors(3)).flatMap { x =>
+    val fut = systemActor ? StartNodeActors(3)
+    fut.flatMap { x =>
       val nodeActor    = Config.m(host)
       val refId        = refIds.incrementAndGet()
       val initSilo     = mkMsg(refId)
       initSilo.id      = seqNum.incrementAndGet()
       location += (refId -> host)
       (nodeActor ? initSilo).map { x =>
-        println("SystemImpl: got response for InitSilo msg")
         // create a typed wrapper
         new MaterializedSiloRef[T](refId, host)(this)
       }

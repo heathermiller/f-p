@@ -31,7 +31,7 @@ class ActorsBackendTest {
   import ActorsBackendTest._
 
   @Test
-  def applyAndSend(): Unit = {
+  def testApplyAndSend(): Unit = {
     implicit val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)
     val fut = SiloRef.fromClass[List[Int]](classOf[MySiloFactory], host)
@@ -48,6 +48,18 @@ class ActorsBackendTest {
     system.waitUntilAllClosed()
     println(s"result 1: $res1")
     assert(res1.toString == "List([4], [3], [2])")
+  }
+
+  @Test
+  def testPopulate(): Unit = {
+    implicit val system = new SystemImpl
+    val host = Host("127.0.0.1", 8090)
+    val ref = SiloRef.populate(host, Item("hello"))
+    val fut = ref.send()
+    val res = Await.result(fut, 5.seconds)
+    system.waitUntilAllClosed()
+    println(s"result: $res")
+    assert(res.toString == "Item(hello)")
   }
 
   //@Test
@@ -76,7 +88,7 @@ class ActorsBackendTest {
   }
 
   @Test
-  def flatMap(): Unit = {
+  def testApply(): Unit = {
     implicit val system = new SystemImpl
     val host = Host("127.0.0.1", 8090)
     val fut1 = SiloRef.fromClass[List[Int]](classOf[MySiloFactory], host)
