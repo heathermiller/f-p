@@ -114,4 +114,24 @@ class ActorsBackendTest {
     println(s"result 1: $res1")
     assert(res1.toString == "List(4, 3, 2, 4, 3, 2)")
   }
+
+  @Test
+  def testCurrentHost(): Unit = {
+    implicit val system = new SystemImpl
+    val host = Host("127.0.0.1", 8090)
+    val fut = SiloRef.fromClass[List[Int]](classOf[MySiloFactory], host)
+
+    val done = fut.flatMap { siloref =>
+      val siloref2 = siloref.apply[List[Int]](new Spore[List[Int], SiloRef[List[Int]]] {
+        def apply(data: List[Int]) =
+          SiloRef.populate(SiloRef.currentHost, data.map(x => x + 1))
+      })
+      siloref2.send()
+    }
+
+    val res = Await.result(done, 5.seconds)
+    system.waitUntilAllClosed()
+    println(s"result: $res")
+    assert(res.toString == "List(5, 4, 3)")
+  }
 }

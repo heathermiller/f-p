@@ -24,7 +24,7 @@ import graph._
 
 
 // emulates a node in the system
-class NodeActor(system: SiloSystemInternal) extends Actor {
+class NodeActor(system: SiloSystemInternal, host: Host) extends Actor {
 
   implicit val timeout: Timeout = 300.seconds
 
@@ -165,6 +165,8 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
             (self ? Graph(app.input, false)).map { case ForceResponse(value) =>
               println(s"yay: input graph is materialized")
               try {
+                // initialize thread-local variable with current host
+                SiloRef.currentHostValue.set(host)
                 val res = fun(value.asInstanceOf[t])
                 val newSilo = new LocalSilo[s](res)
                 if (cache) {
@@ -189,6 +191,8 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
             val promise = getOrElseInitPromise(fm.refId)
             (self ? Graph(fm.input, false)).map { case ForceResponse(value) =>
               try {
+                // initialize thread-local variable with current host
+                SiloRef.currentHostValue.set(host)
                 val resSilo = fun(value.asInstanceOf[t])
                 val res = resSilo.send()
                 res.map { case data =>
