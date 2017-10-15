@@ -94,6 +94,13 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
         }
       }
 
+    case theMsg @ InitSiloValue(value, refId) =>
+      val promise = getOrElseInitPromise(refId)
+      promise.success(new LocalSilo(value))
+      val replyMsg = OKCreated(refId)
+      replyMsg.id = theMsg.id
+      sender() ! replyMsg
+
     case theMsg @ InitSiloFun(fun, refId) =>
       println(s"SERVER: creating silo using class $fun...")
 
@@ -192,6 +199,9 @@ class NodeActor(system: SiloSystemInternal) extends Actor {
                   } else {
                     val msg = ForceResponse(newSilo)
                   }
+
+                  // promise.trySuccess(silo)
+                  // sender ! ForceResponse(silo.value)
                   respondSilo(promise, localSender, newSilo, fm.refId)
                 }
               } catch {
