@@ -24,7 +24,8 @@ class GraphPicklingTest {
   implicit val sp2 = implicitly[Pickler[Spore2[(String, Int), Emitter[String], Unit]]]
   implicit val sup2 = implicitly[Unpickler[Spore2[(String, Int), Emitter[String], Unit]]]
 
-  @Test def testPickleGraph(): Unit = {
+  //@Test
+  def testPickleGraph(): Unit = {
     runtime.GlobalRegistry.picklerMap += ("silt.graph.CommandEnvelope" -> { x => silt.graph.Picklers.CommandEnvelopePU })
     runtime.GlobalRegistry.unpicklerMap += ("silt.graph.CommandEnvelope" -> silt.graph.Picklers.CommandEnvelopePU)
 

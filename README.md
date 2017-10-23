@@ -20,9 +20,8 @@ Examples and tests can be launched from the sbt prompt:
 >
 > Multiple main classes detected, select one to run:
 >
->  [1] samples.datastructure.Demo
->  [2] samples.getstarted.Client
->  [3] samples.getstarted.Server
+>  [1] samples.getstarted.Client
+>  [2] samples.getstarted.Server
 >
 > Enter number:
 >
@@ -31,4 +30,4 @@ Examples and tests can be launched from the sbt prompt:
 > multi-jvm:run netty.WordCount
 ```
 
-Note, `samples.getstarted.Client` and `samples.getstarted.Server` must be run in different `sbt` sessions, e.g., in two different Terminals. 
+Note that `samples.getstarted.Client` and `samples.getstarted.Server` must be run in different `sbt` sessions, e.g., in two different terminals.

@@ -1,5 +1,5 @@
 package samples
-package getstarted 
+package getstarted
 
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -8,7 +8,16 @@ import scala.concurrent.duration._
 import scala.pickling.Defaults._
 import scala.pickling.shareNothing._
 
-import silt.{SiloSystem, Host, LocalSilo}
+import scala.spores._
+import SporePickler._
+
+import silt.{SiloSystem, SiloRef, Host, LocalSilo, SiloFactory}
+
+
+class WordsSiloFactory extends SiloFactory[List[String]] {
+  def data =
+    Client.populateSilo(10, new scala.util.Random(100))
+}
 
 object Client {
 
@@ -29,7 +38,7 @@ package!
     words(index)
   }
 
-  def populateSilo(numLines: Int, random: scala.util.Random): LocalSilo[String, List[String]] = {
+  def populateSilo(numLines: Int, random: scala.util.Random): LocalSilo[List[String]] = {
     // each string is a concatenation of 10 random words, separated by space
     val buffer = collection.mutable.ListBuffer[String]()
     val lines = for (i <- 0 until numLines) yield {
@@ -40,10 +49,10 @@ package!
   }
 
   def main(args: Array[String]): Unit = {
-    val system = SiloSystem()
+    implicit val system = SiloSystem("silt.netty.SystemImpl")
     val host = Host("127.0.0.1", 8090)
 
-    val siloFut = system.fromFun(host)(() => populateSilo(10, new scala.util.Random(100)))
+    val siloFut = SiloRef.fromClass[List[String]](classOf[WordsSiloFactory], host)
     val done = siloFut.flatMap(_.send())
 
     val res = Await.result(done, 15.seconds)

@@ -3,32 +3,27 @@ package silt
 import scala.pickling._
 import Defaults._
 
+import scala.spores._
+
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 import scala.collection.mutable
 import scala.collection.concurrent.TrieMap
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import com.typesafe.scalalogging.{StrictLogging => Logging}
 
-object SiloSystem {
-  def apply(): SiloSystem =
-    new silt.netty.SystemImpl
+object SiloSystem extends AnyRef with Logging {
+  def apply(className: String = "silt.actors.SystemImpl"): SiloSystem = {
+    val clazz = sys.props.getOrElse("silo.system.impl", className)
+    logger.info(s"Initializing silo system with `$clazz`")
+    Class.forName(clazz).newInstance().asInstanceOf[SiloSystem]
+  }
 }
 
 trait SiloSystem {
   self: SiloSystemInternal =>
-
-  def fromClass[U, T <: Traversable[U]](clazz: Class[_], host: Host): Future[SiloRef[U, T]] =
-    initRequest[U, T, InitSilo](host, { (refId: Int) =>
-      println(s"fromClass: register location of $refId")
-      InitSilo(clazz.getName(), refId)
-    })
-
-  def fromFun[U, T <: Traversable[U]](host: Host)(fun: () => LocalSilo[U, T])(implicit p: Pickler[InitSiloFun[U, T]]): Future[SiloRef[U, T]] =
-    initRequest[U, T, InitSiloFun[U, T]](host, { (refId: Int) =>
-      println(s"fromFun: register location of $refId")
-      InitSiloFun(fun, refId)
-    })
 
   // the idea is that empty silos can only be filled using pumpTos.
   // we'll detect issues like trying to fill a silo that's been constructed
@@ -36,13 +31,14 @@ trait SiloSystem {
   //
   // to push checking further to compile time, could think of
   // using phantom types to detect whether a ref has been target of non-pumpTo!
-  def emptySilo[U, T <: Traversable[U]](host: Host): SiloRef[U, T] = {
+  def emptySilo[T](host: Host): SiloRef[T] = {
     val refId = refIds.incrementAndGet()
     location += (refId -> host)
-    new graph.EmptySiloRef[U, T](refId, host)(this)
+    new graph.EmptySiloRef[T](refId, host)(this)
   }
 
   def waitUntilAllClosed(): Unit
+  def waitUntilAllClosed(tm1: FiniteDuration, tm2: FiniteDuration): Unit
 }
 
 // abstracts from different network layer backends
@@ -60,6 +56,6 @@ private[silt] trait SiloSystemInternal {
   // idea: return Future[SelfDescribing]
   def send[T <: ReplyMessage : Pickler](host: Host, msg: T): Future[Any]
 
-  def initRequest[U, T <: Traversable[U], V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[U, T]]
+  def initRequest[T, V <: ReplyMessage : Pickler](host: Host, mkMsg: Int => V): Future[SiloRef[T]]
 
 }

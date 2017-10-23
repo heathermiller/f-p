@@ -1,0 +1,7 @@
+In this talk, I'll present some of our ongoing work on a new programming model
+for asynchronous and distributed programming. For now, we call it "function-passing"
+or "function-passing style", and it can be thought of as an inversion
+of the actor model - keep your data stationary, send and apply your
+functionality (functions/spores) to that stationary data, and get typed
+communication all for free, all in a friendly collections/futures-like
+package!
