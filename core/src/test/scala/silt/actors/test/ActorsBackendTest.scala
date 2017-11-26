@@ -62,6 +62,17 @@ class ActorsBackendTest {
     assert(res.toString == "Item(hello)")
   }
 
+  @Test
+  def testFromTextFile(): Unit = {
+    implicit val system = new SystemImpl
+    val host = Host("127.0.0.1", 8090)
+    val ref = SiloRef.fromTextFile(host, new java.io.File("test-file.txt"))
+    val fut = ref.send()
+    val res = Await.result(fut, 5.seconds)
+    system.waitUntilAllClosed()
+    assert(res.toString == "List(hello)")
+  }
+
   //@Test
   def pumpTo(): Unit = {
     implicit val system = new SystemImpl

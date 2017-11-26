@@ -101,6 +101,15 @@ class NodeActor(system: SiloSystemInternal, host: Host) extends Actor {
       replyMsg.id = theMsg.id
       sender() ! replyMsg
 
+    case theMsg @ InitSiloFile(fileName, refId) =>
+      val promise = getOrElseInitPromise(refId)
+      val url = this.getClass().getResource("/" + fileName)
+      val list = scala.io.Source.fromURL(url).getLines().toList
+      promise.success(new LocalSilo(list))
+      val replyMsg = OKCreated(refId)
+      replyMsg.id = theMsg.id
+      sender() ! replyMsg
+
     case theMsg @ InitSiloFun(fun, refId) =>
       println(s"SERVER: creating silo using class $fun...")
 
