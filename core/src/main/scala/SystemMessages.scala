@@ -18,6 +18,8 @@ case class InitSiloFun[T](fun: Spore[Unit, LocalSilo[T]], refId: Int) extends Re
 
 case class InitSiloValue[T](value: T, refId: Int) extends ReplyMessage
 
+case class InitSiloFile(fileName: String, refId: Int) extends ReplyMessage
+
 case class OKCreated(refId: Int) extends ReplyMessage
 
 case class ApplyMessage[A, B](refId: Int, fun: A => B, newRefId: Int)
